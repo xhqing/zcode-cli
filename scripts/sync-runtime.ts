@@ -515,7 +515,10 @@ export function patchRuntimeTuiBridge(runtime: string): string {
     assignments.push(`${bridge}.setTransientModel=async e=>await(await ${getApp}()).setModel?.(e,{transient:!0})`);
   }
   if (!sessionEventsBridgePattern.test(patched)) {
-    assignments.push(`${bridge}.subscribeSessionEvents=e=>{let t=!1,r;${getApp}().then(o=>{t||(r=o.runtime?.subscribeEvents?.({onSessionEvent:e}))});return()=>{t=!0,r?.()}}`);
+    // getApp() rejects with model_config_missing while login is pending; that
+    // must stay a silent no-op or the unhandled rejection kills the TUI before
+    // the user can run /login.
+    assignments.push(`${bridge}.subscribeSessionEvents=e=>{let t=!1,r;${getApp}().then(o=>{t||(r=o.runtime?.subscribeEvents?.({onSessionEvent:e}))}).catch(()=>{});return()=>{t=!0,r?.()}}`);
   }
   if (!taskMessageBridgePattern.test(patched)) {
     assignments.push(taskMessageAssignment);
