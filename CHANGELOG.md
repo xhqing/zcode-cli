@@ -2,7 +2,13 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
-## Unreleased（自 3.8.1-15 起）
+## 3.8.1-16
+
+### 变更
+
+- **版本号由 3.8.1-15 bump 到 3.8.1-16**（VERSION、package.json、README.md、README_cn.md、test/update.test.ts、CHANGELOG.md）。
+  - 为什么改：CHANGELOG 顶部积压了 Unreleased 段（--update 自更新、rebrand、LOGO 等），按 docs/RELEASING.md 规范，发布本地 feature 前须递增 build 号；且 npm 上原作者 kingsword09 已发布同名的 3.8.1-15（内容与本地 HEAD 不同），bump 到 -16 避免与原作者发布通道的同名版本混淆。
+  - 改了什么：VERSION、package.json `version` 字段、两版 README 徽章、test/update.test.ts 的版本期望串、CHANGELOG Unreleased 段定稿为 `## 3.8.1-16`，全部同步为 3.8.1-16。
 
 ### 新增
 
@@ -26,7 +32,7 @@
   - 改了什么：package.json 的 `author` 改为 `All Contributors`，`homepage` / `bugs` / `repository` 全部指向 `xhqing/zcode-cli`；check-package.ts 与 release-package.test.ts 中对应校验值同步更新；TUI 更新卡片的 release notes 链接改为本仓库；README.md「参与贡献」段仓库地址更新；demo.svg 录屏文本中的原作者用户名、个人文件路径等长替换为本仓库路径（保持 SVG 布局不变）。`bun run build:tui` 重建后 dist 与 vendor 内的链接同步更新（两文件逐字节一致）。
 - **README 新增项目 LOGO、补齐标准徽章、删除 npm 徽章**（README.md、README_cn.md、assets/logo.svg 新建）。
   - 为什么改：项目 README 缺少 LOGO；npm version / npm downloads 两枚徽章指向原作者发布通道、不再适用；按项目标配应含 License / Version / Type 三枚标准徽章。
-  - 改了什么：新建 640×200 青蓝渐变色卡 LOGO（终端 `>_` 主题，圆角 rx=28，assets/logo.svg），插入两版 README 顶部；删除两枚 npm 徽章，补 License（MIT）、Version（3.8.1-15，链接 CHANGELOG）、Type（CLI Tool）三枚静态徽章。
+  - 改了什么：新建 640×200 青蓝渐变色卡 LOGO（终端 `>_` 主题，圆角 rx=28，assets/logo.svg），插入两版 README 顶部；删除两枚 npm 徽章，补 License（MIT）、Version（3.8.1-16，链接 CHANGELOG）、Type（CLI Tool）三枚静态徽章。
 
 ## 3.8.1-15
 
