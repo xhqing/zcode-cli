@@ -7,7 +7,7 @@ import { sanitizeTerminalText } from "./terminal-text.ts";
 import type { ZCodeTheme } from "./theme.ts";
 
 export const updateCommand = "npm install -g zcode-app-cli@latest";
-export const releaseNotesUrl = "https://github.com/kingsword09/zcode-cli/releases/latest";
+export const releaseNotesUrl = "https://github.com/xhqing/zcode-cli/releases/latest";
 
 export class UpdateAvailableView extends Box {
   constructor(theme: ZCodeTheme, currentVersion: string, latestVersion: string) {

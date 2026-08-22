@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200" role="img" aria-label="zcode-cli">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="200" rx="28" ry="28" fill="url(#bg)"/>
+  <text x="100" y="108" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="58" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">&gt;_</text>
+  <text x="180" y="92" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="700" fill="#ffffff">zcode-cli</text>
+  <text x="182" y="126" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="17" fill="#ffffff" fill-opacity="0.92">Unofficial Terminal Client for ZCode Desktop</text>
+</svg>

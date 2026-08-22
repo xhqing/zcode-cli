@@ -15,15 +15,15 @@
     "z-ai",
     "zcode"
   ],
-  "homepage": "https://github.com/kingsword09/zcode-cli#readme",
+  "homepage": "https://github.com/xhqing/zcode-cli#readme",
   "bugs": {
-    "url": "https://github.com/kingsword09/zcode-cli/issues"
+    "url": "https://github.com/xhqing/zcode-cli/issues"
   },
   "license": "MIT",
-  "author": "Kingsword kingsword09 <kingsword09@gmail.com>",
+  "author": "All Contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kingsword09/zcode-cli.git"
+    "url": "git+https://github.com/xhqing/zcode-cli.git"
   },
   "type": "module",
   "bin": {
@@ -35,7 +35,7 @@
     "config.example.json",
     "zcode-runtime.lock.json",
     "README.md",
-    "LICENSE"
+    "LICENSE.md"
   ],
   "scripts": {
     "build": "tsdown",

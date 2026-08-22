@@ -13,7 +13,7 @@ import {
 } from "../scripts/pack-release.ts";
 
 const requiredPaths = [
-  "LICENSE",
+  "LICENSE.md",
   "README.md",
   "bin/zcode.js",
   "config.example.json",
@@ -70,11 +70,11 @@ describe("release package", () => {
     expect(packageJson.dependencies.zigpty).toBeUndefined();
     expect(packageJson.dependencies.bun).toBeUndefined();
     expect(packageJson.dependencies["playwright-core"]).toBe("1.59.1");
-    expect(packageJson.homepage).toBe("https://github.com/kingsword09/zcode-cli#readme");
-    expect(packageJson.bugs.url).toBe("https://github.com/kingsword09/zcode-cli/issues");
+    expect(packageJson.homepage).toBe("https://github.com/xhqing/zcode-cli#readme");
+    expect(packageJson.bugs.url).toBe("https://github.com/xhqing/zcode-cli/issues");
     expect(packageJson.repository).toEqual({
       type: "git",
-      url: "git+https://github.com/kingsword09/zcode-cli.git"
+      url: "git+https://github.com/xhqing/zcode-cli.git"
     });
     expect(packageJson.keywords).toEqual(expect.arrayContaining(["cli", "node", "terminal", "tui", "zcode"]));
   });
@@ -116,16 +116,16 @@ describe("release package", () => {
       version: "3.3.5-1",
       description: "Unofficial terminal client",
       keywords: ["cli", "node", "terminal", "tui", "zcode"],
-      homepage: "https://github.com/kingsword09/zcode-cli#readme",
-      bugs: { url: "https://github.com/kingsword09/zcode-cli/issues" },
+      homepage: "https://github.com/xhqing/zcode-cli#readme",
+      bugs: { url: "https://github.com/xhqing/zcode-cli/issues" },
       license: "MIT",
-      author: "Kingsword kingsword09 <kingsword09@gmail.com>",
+      author: "All Contributors",
       repository: {
         type: "git",
-        url: "git+https://github.com/kingsword09/zcode-cli.git"
+        url: "git+https://github.com/xhqing/zcode-cli.git"
       },
       bin: { zcode: "bin/zcode.js" },
-      files: ["bin/zcode.js", "vendor", "config.example.json", "zcode-runtime.lock.json", "README.md", "LICENSE"],
+      files: ["bin/zcode.js", "vendor", "config.example.json", "zcode-runtime.lock.json", "README.md", "LICENSE.md"],
       publishConfig: { access: "public", provenance: true },
       dependencies: {
         "@earendil-works/pi-tui": "^0.80.6",
@@ -138,7 +138,7 @@ describe("release package", () => {
       dependencies: { "@earendil-works/pi-tui": "^0.80.6" }
     };
     const files: Record<string, string> = {
-      "LICENSE": "license",
+      "LICENSE.md": "license",
       "README.md": "readme",
       "bin/zcode.js": "#!/usr/bin/env node\nimport { spawn } from \"node:child_process\";\n",
       "bin/zcode.ts": "export {};\n",

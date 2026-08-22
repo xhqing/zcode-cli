@@ -32,7 +32,7 @@ interface PackageIdentity {
 }
 
 const requiredFiles = [
-  "LICENSE",
+  "LICENSE.md",
   "README.md",
   "bin/zcode.js",
   "config.example.json",
@@ -44,7 +44,7 @@ const requiredFiles = [
   "zcode-runtime.lock.json"
 ];
 const allowedRoots = new Set([
-  "LICENSE",
+  "LICENSE.md",
   "README.md",
   "bin/zcode.js",
   "config.example.json",

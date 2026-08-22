@@ -16,7 +16,7 @@ const publishedFiles = [
   "config.example.json",
   "zcode-runtime.lock.json",
   "README.md",
-  "LICENSE"
+  "LICENSE.md"
 ];
 
 interface PackageManifest {
@@ -73,7 +73,7 @@ function sameStringArray(left: unknown, right: string[]): boolean {
 
 export async function validatePackageTree(base = root): Promise<void> {
   const required = [
-    "LICENSE",
+    "LICENSE.md",
     "README.md",
     "bin/zcode.js",
     "bin/zcode.ts",
@@ -109,10 +109,10 @@ export async function validatePackageTree(base = root): Promise<void> {
     || !["cli", "node", "terminal", "tui", "zcode"].every((keyword) => keywords.includes(keyword))) {
     throw new Error("The npm package keywords are incomplete.");
   }
-  if (packageJson.homepage !== "https://github.com/kingsword09/zcode-cli#readme"
-    || packageJson.bugs?.url !== "https://github.com/kingsword09/zcode-cli/issues"
+  if (packageJson.homepage !== "https://github.com/xhqing/zcode-cli#readme"
+    || packageJson.bugs?.url !== "https://github.com/xhqing/zcode-cli/issues"
     || packageJson.repository?.type !== "git"
-    || packageJson.repository?.url !== "git+https://github.com/kingsword09/zcode-cli.git") {
+    || packageJson.repository?.url !== "git+https://github.com/xhqing/zcode-cli.git") {
     throw new Error("The npm package repository metadata is inconsistent.");
   }
   if (packageJson.license !== "MIT" || typeof packageJson.author !== "string" || !packageJson.author.trim()) {

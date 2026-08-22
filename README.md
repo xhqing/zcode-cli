@@ -1,8 +1,12 @@
 # zcode-app-cli
 
-[![npm version](https://img.shields.io/npm/v/zcode-app-cli.svg?label=npm)](https://www.npmjs.com/package/zcode-app-cli)
-[![npm downloads](https://img.shields.io/npm/dm/zcode-app-cli.svg)](https://www.npmjs.com/package/zcode-app-cli)
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+![zcode-cli](./assets/logo.svg)
+
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--15-blue.svg)](./CHANGELOG.md)
+[![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
+
+[简体中文](README_cn.md)
 
 Unofficial terminal client for the official agent runtime shipped with ZCode Desktop.
 
@@ -45,7 +49,7 @@ Reopen it anytime with `/setup`; press Esc to skip.
 - [Configuration](#configuration)
 - [Local development](#local-development)
 - [Contributing](#contributing)
-- [License](#license)
+- [License & Attribution](#license--attribution)
 
 ## Install and update
 
@@ -427,11 +431,15 @@ and publishing workflows, see [Releasing](./docs/RELEASING.md).
 ## Contributing
 
 Issues and pull requests are welcome at
-[github.com/kingsword09/zcode-cli](https://github.com/kingsword09/zcode-cli).
+[github.com/xhqing/zcode-cli](https://github.com/xhqing/zcode-cli).
 Please open an issue first to discuss substantial changes. See
 [Development](./docs/DEVELOPMENT.md) for the local setup and validation
 commands, and [Releasing](./docs/RELEASING.md) for the release flow.
 
-## License
+## License & Attribution
 
-MIT — see [LICENSE](./LICENSE).
+This project is released under the [MIT License](./LICENSE.md).
+
+- Copyright (c) 2026 All Contributors.
+- Attribution: when you reuse or redistribute this project, please keep the copyright notice and license text, and credit the project by linking back to its repository.
+- Project URL: https://github.com/xhqing/zcode-cli
