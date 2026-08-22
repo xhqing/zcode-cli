@@ -141,7 +141,7 @@ describe("startup update check", () => {
       currentVersion: "3.3.5-1",
       fetcher: async (url, init) => {
         requestedUrl = url;
-        expect(new Headers(init.headers).get("user-agent")).toBe("zcode-app-cli/3.3.5-1");
+        expect(new Headers(init.headers).get("user-agent")).toBe("zcode-cli/3.3.5-1");
         expect(init.signal).toBeInstanceOf(AbortSignal);
         return new Response(JSON.stringify({ version: "3.3.5-2" }), {
           headers: { "content-type": "application/json" },

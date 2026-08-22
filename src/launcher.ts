@@ -27,6 +27,7 @@ import {
 } from "./zai-oauth.ts";
 import { requestAppServer } from "./app-server-client.ts";
 import { runPluginCommand } from "./plugin-cli.ts";
+import { isUpdateInvocation, runSelfUpdate } from "./update.ts";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageManifestPath = join(packageRoot, "package.json");
@@ -99,7 +100,7 @@ export function isVersionInvocation(args: string[]): boolean {
 
 export function formatVersionOutput(distributionVersion: string, runtimeVersion: string): string {
   return [
-    `zcode-app-cli ${safeVersion(distributionVersion) ?? "unknown"}`,
+    `zcode-cli ${safeVersion(distributionVersion) ?? "unknown"}`,
     `zcode-runtime ${safeVersion(runtimeVersion) ?? "unknown"}`
   ].join("\n");
 }
@@ -410,6 +411,20 @@ export async function main(args: string[]): Promise<number> {
     }
     console.log(formatVersionOutput(distributionVersion, runtimeVersion));
     return 0;
+  }
+
+  if (isUpdateInvocation(args)) {
+    const distributionVersion = readDistributionVersion();
+    if (!distributionVersion) {
+      console.error("Unable to read the installed package version metadata.");
+      return 1;
+    }
+    try {
+      return await runSelfUpdate(distributionVersion);
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    }
   }
 
   let setupPending = false;

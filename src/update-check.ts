@@ -146,7 +146,7 @@ export async function refreshUpdateCache(options: RefreshUpdateCacheOptions): Pr
     const response = await fetcher(UPDATE_CHECK_URL, {
       headers: {
         accept: "application/json",
-        "user-agent": `zcode-app-cli/${options.currentVersion}`
+        "user-agent": `zcode-cli/${options.currentVersion}`
       },
       signal: controller.signal
     });

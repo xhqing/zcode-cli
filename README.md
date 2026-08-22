@@ -1,4 +1,4 @@
-# zcode-app-cli
+# zcode-cli
 
 ![zcode-cli](./assets/logo.svg)
 
@@ -20,7 +20,7 @@ This project is not affiliated with or endorsed by Z.ai. ZCode and its bundled
 runtime remain subject to their upstream terms. Confirm that you are allowed to
 redistribute the extracted runtime before publishing the npm package.
 
-![zcode-app-cli TUI demo](./docs/assets/demo.svg)
+![zcode-cli TUI demo](./docs/assets/demo.svg)
 
 ## Quick start
 
@@ -59,13 +59,27 @@ npm install -g zcode-app-cli@latest
 bun add -g zcode-app-cli@latest
 ```
 
-Using `@latest` is intentional because the App-aligned release format uses a
-SemVer prerelease segment such as `3.3.5-2`. The tag always points to the
-newest validated App-plus-build release.
+The npm package is named `zcode-app-cli` (the `zcode-cli` name on npm is
+owned by an unrelated package); the project and command are called
+`zcode-cli` / `zcode`. Using `@latest` is intentional because the
+App-aligned release format uses a SemVer prerelease segment such as
+`3.3.5-2`. The tag always points to the newest validated App-plus-build
+release.
+
+To upgrade an existing installation, run:
+
+```bash
+zcode --update
+```
+
+The command resolves the newest release from GitHub Releases (via the `gh`
+CLI), downloads the release tarball asset, and reinstalls it globally.
+GitHub Releases are the only update channel — every release carries the
+`zcode-app-cli-<version>.tgz` asset that this command installs.
 
 Interactive startup checks the npm `latest` tag at most once every 20 hours
 per installed version and shows a cached newer version as a non-blocking
-update card with the exact install command and release-notes link. CI
+update card with the exact update command and release-notes link. CI
 environments skip the check automatically. Set `ZCODE_DISABLE_UPDATE_CHECK=1`
 or `NO_UPDATE_NOTIFIER=1` to disable it.
 

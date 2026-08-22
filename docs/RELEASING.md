@@ -1,9 +1,10 @@
-# Releasing zcode-app-cli
+# Releasing zcode-cli
 
 This document covers the maintainer-only workflows for synchronizing the
 upstream runtime, building the npm tarball, and publishing releases. End users
 do not need any of this — see the [main README](../README.md) for installation
-and usage.
+and usage. The npm package is distributed as `zcode-app-cli`; `zcode-cli` is
+the project / command display name.
 
 ## Remote extraction
 

@@ -1,4 +1,4 @@
-# zcode-app-cli
+# zcode-cli
 
 ![zcode-cli](./assets/logo.svg)
 
@@ -17,7 +17,7 @@
 本项目与 Z.ai 无隶属关系、也未获其背书。ZCode 及其附带的 runtime 仍受上游条款约束；
 发布 npm 包前请先确认你有权再分发提取出的 runtime。
 
-![zcode-app-cli TUI demo](./docs/assets/demo.svg)
+![zcode-cli TUI demo](./docs/assets/demo.svg)
 
 ## 快速开始
 
@@ -54,12 +54,23 @@ npm install -g zcode-app-cli@latest
 bun add -g zcode-app-cli@latest
 ```
 
-固定使用 `@latest` 是有意为之：与 App 对齐的版本号采用 `3.3.5-2` 这类带
-SemVer 预发布段的格式，`latest` 标签始终指向最新验证过的「App 版本 + 构建号」
-发布。
+npm 包名为 `zcode-app-cli`（npm 上的 `zcode-cli` 名字已被无关包占用），
+项目与命令的展示名为 `zcode-cli` / `zcode`。固定使用 `@latest` 是有意为之：
+与 App 对齐的版本号采用 `3.3.5-2` 这类带 SemVer 预发布段的格式，`latest`
+标签始终指向最新验证过的「App 版本 + 构建号」发布。
+
+已安装的用户升级只需执行：
+
+```bash
+zcode --update
+```
+
+该命令经 `gh` CLI 从 GitHub Release 解析最新版本，下载 Release 上挂的
+`zcode-app-cli-<版本>.tgz` asset 后全局重装。GitHub Release 是唯一的更新
+渠道——每个 Release 都附带该 tarball asset。
 
 交互式启动时，每 20 小时至多检查一次 npm `latest` 标签（按已安装版本计），有新
-版本时以非阻塞的更新卡片提示，附精确的安装命令与 release notes 链接。CI 环境
+版本时以非阻塞的更新卡片提示，附精确的更新命令与 release notes 链接。CI 环境
 自动跳过检查。设置 `ZCODE_DISABLE_UPDATE_CHECK=1` 或 `NO_UPDATE_NOTIFIER=1`
 可关闭。
 

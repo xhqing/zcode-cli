@@ -583,7 +583,7 @@ describe("runtime synchronization", () => {
     expect(patched).not.toContain("e.loadSessionTranscript?.()");
     expect(patched).toContain("E.readSessionUsage=async()=>await(await S()).readSessionUsage?.()??null");
     expect(patched).toContain("E.cancelBackgroundTask=async e=>await(await S()).cancelBackgroundTask?.(e)??null");
-    expect(patched).toContain("E.subscribeSessionEvents=e=>{let t=!1,r;S().then(o=>{t||(r=o.runtime?.subscribeEvents?.({onSessionEvent:e}))});return()=>{t=!0,r?.()}}");
+    expect(patched).toContain("E.subscribeSessionEvents=e=>{let t=!1,r;S().then(o=>{t||(r=o.runtime?.subscribeEvents?.({onSessionEvent:e}))}).catch(()=>{});return()=>{t=!0,r?.()}}");
     expect(patched).toContain("E.sendBackgroundTaskMessage=async e=>");
     expect(patched).toContain('if(e?.restart===!0&&o.status==="running")');
     expect(patched).toContain("await r.subagentPort.stopTask(e.taskId)");

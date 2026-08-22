@@ -58,7 +58,7 @@ describe("launcher routing", () => {
     }
 
     expect(formatVersionOutput("3.3.6-3", "0.15.2")).toBe(
-      "zcode-app-cli 3.3.6-3\nzcode-runtime 0.15.2"
+      "zcode-cli 3.3.6-3\nzcode-runtime 0.15.2"
     );
     expect(isVersionInvocation(["version"])).toBe(true);
     expect(isVersionInvocation(["--version"])).toBe(true);

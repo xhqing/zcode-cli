@@ -219,6 +219,18 @@ describe("release workflows", () => {
     expect(publishIndex).toBeGreaterThan(-1);
     expect(tagIndex).toBeGreaterThan(publishIndex);
     expect(releaseIndex).toBeGreaterThan(tagIndex);
+
+    // Every GitHub Release must carry the tarball asset that `zcode --update`
+    // downloads; an existing release gets the asset attached too.
+    const createRelease = publishJob.steps[releaseIndex];
+    const attachStep = publishJob.steps.find(
+      (step) => step.name === "Attach tarball to an existing GitHub Release"
+    );
+    expect(createRelease?.run).toContain("gh release create");
+    expect(createRelease?.run).toContain("gh release upload \"$TAG\" \".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz\" --clobber");
+    expect(attachStep?.if).toBe("steps.release.outputs.enabled == 'true' && steps.release.outputs.create_release == 'false'");
+    expect(attachStep?.run).toBe("gh release upload \"$TAG\" \".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz\" --clobber");
+
     expect(source).not.toContain("NPM_TOKEN");
     expect(source).not.toContain("npm@latest");
     expect(source).toContain("npm@12.0.1");

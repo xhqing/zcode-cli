@@ -300,7 +300,18 @@ jobs:
           PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
           PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
           TAG: ${{ steps.release.outputs.tag }}
-        run: gh release create "$TAG" --verify-tag --generate-notes --title "${PACKAGE_NAME}@${PACKAGE_VERSION}"
+        run: |
+          gh release create "$TAG" --verify-tag --generate-notes --title "${PACKAGE_NAME}@${PACKAGE_VERSION}"
+          gh release upload "$TAG" ".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz" --clobber
+
+      - name: Attach tarball to an existing GitHub Release
+        if: steps.release.outputs.enabled == 'true' && steps.release.outputs.create_release == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
+          PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: gh release upload "$TAG" ".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz" --clobber
 
       - name: Summarize release
         if: always()

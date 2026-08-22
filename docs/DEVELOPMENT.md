@@ -1,6 +1,6 @@
 # Local development
 
-This document covers setting up a development environment for zcode-app-cli.
+This document covers setting up a development environment for zcode-cli.
 For installation as an end user, see the [main README](../README.md).
 
 ## Prerequisites
@@ -125,7 +125,7 @@ outside TUI, `--prompt` and `--target` invocations.
 layers explicitly:
 
 ```text
-zcode-app-cli 3.3.6-4
+zcode-cli 3.3.6-4
 zcode-runtime 0.15.2
 ```
 
