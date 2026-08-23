@@ -8,6 +8,7 @@ bin/zcode.js
 *.tgz
 .DS_Store
 tmp/
+.env
 
 # Claude Code 个人本地配置（机器本地，不提交）
 .claude/settings.local.json

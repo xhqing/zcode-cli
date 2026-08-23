@@ -195,6 +195,11 @@ jobs:
             --pack-destination .release/rebuilt > .release/rebuilt.json
           REBUILT_TARBALL=$(find .release/rebuilt -maxdepth 1 -type f -name '*.tgz' -print -quit)
           [[ -n "$REBUILT_TARBALL" ]] || { echo "Rebuilding the release tarball produced no archive." >&2; exit 1; }
+          # npm pack names the archive after the package (zcode-app-cli); the
+          # validated asset carries the project name (zcode-cli). Compare the
+          # contents under the rebuilt name, then publish the renamed asset.
+          mv "$REBUILT_TARBALL" ".release/rebuilt/$(basename "$VALIDATED_TARBALL")"
+          REBUILT_TARBALL=".release/rebuilt/$(basename "$VALIDATED_TARBALL")"
           if ! cmp -- "$VALIDATED_TARBALL" "$REBUILT_TARBALL"; then
             echo "The privileged publish job produced a different tarball than the validated job." >&2
             exit 1
@@ -302,7 +307,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           gh release create "$TAG" --verify-tag --generate-notes --title "${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          gh release upload "$TAG" ".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz" --clobber
+          gh release upload "$TAG" ".release/zcode-cli-${PACKAGE_VERSION}.tgz" --clobber
 
       - name: Attach tarball to an existing GitHub Release
         if: steps.release.outputs.enabled == 'true' && steps.release.outputs.create_release == 'false'
@@ -311,7 +316,7 @@ jobs:
           PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
           PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
           TAG: ${{ steps.release.outputs.tag }}
-        run: gh release upload "$TAG" ".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz" --clobber
+        run: gh release upload "$TAG" ".release/zcode-cli-${PACKAGE_VERSION}.tgz" --clobber
 
       - name: Summarize release
         if: always()

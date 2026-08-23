@@ -843,7 +843,8 @@ class ZCodeTui {
       { name: "settings", description: "Configure ZCode TUI settings" },
       { name: "search", description: "Search the retained transcript", argumentHint: "<text>|next|prev|clear" },
       { name: "transcript", description: "Navigate and expand individual transcript blocks", argumentHint: "next|prev|latest|close" },
-      { name: "exit", description: "Exit ZCode" }
+      { name: "exit", description: "Exit ZCode" },
+      { name: "quit", description: "Exit ZCode" }
     ]) {
       if (!commands.some((item) => item.name === command.name)) commands.push(command);
     }

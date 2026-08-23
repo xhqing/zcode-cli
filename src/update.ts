@@ -12,6 +12,14 @@ export const updateRepository = "xhqing/zcode-cli";
 export const packageName = "zcode-app-cli";
 /** Display name used in user-facing progress output. */
 export const displayName = "zcode-cli";
+/**
+ * Release asset name for a version. Assets are named after the project
+ * (`zcode-cli-<version>.tgz`), not the npm package; pack-release.ts renames
+ * the `npm pack` output accordingly.
+ */
+export function releaseAssetName(version: string): string {
+  return `zcode-cli-${version}.tgz`;
+}
 
 export interface LatestRelease {
   tagName: string;
@@ -114,7 +122,7 @@ function downloadTarballOptions(
       "--repo",
       updateRepository,
       "--pattern",
-      `${packageName}-${release.version}.tgz`,
+      releaseAssetName(release.version),
       "--dir",
       directory,
       "--clobber"
@@ -132,7 +140,7 @@ export async function downloadReleaseTarball(
   directory: string,
   runners: { ghDownload?: (args: string[]) => Promise<{ code: number; stderr: string }> } = {}
 ): Promise<string> {
-  const expected = join(directory, `${packageName}-${release.version}.tgz`);
+  const expected = join(directory, releaseAssetName(release.version));
   const ghDownload = runners.ghDownload
     ?? (async (args) => await captureCommand("gh", args));
   const { command, args } = downloadTarballOptions(release, directory);
@@ -188,7 +196,7 @@ export async function runSelfUpdate(
 
   const directory = await makeTempDir();
   try {
-    write(streams.out, `Downloading ${displayName} ${release.version} (${packageName}-${release.version}.tgz)…\n`);
+    write(streams.out, `Downloading ${displayName} ${release.version} (${releaseAssetName(release.version)})…\n`);
     const tarballPath = await downloadReleaseTarball(release, directory, options.downloadRunners);
     write(streams.out, "Installing globally…\n");
     await install(tarballPath);

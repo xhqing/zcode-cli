@@ -65,12 +65,51 @@ Three model-access paths are supported:
 - **Z.AI/BigModel Coding Plan API key**: open `/login` in the TUI and choose the
   matching masked API-key option;
 - **Direct API key with a custom provider**: use the
-  [`config.example.json`](../config.example.json) template and do not log in.
+  [`config.example.json`](../config.example.json) template — or the flat
+  [`.env` file](#environment-file-env) — and do not log in.
 
 When `model.main` already resolves to a configured provider/model with an
 inline API key, plain `zcode login` exits successfully and explains that OAuth
 is unnecessary. This prevents a custom provider from being replaced by an
 unrelated login flow.
+
+### Environment file (.env)
+
+Instead of hand-editing the nested `config.json`, keep model settings in a
+single flat file. Copy the commented template from the repository to
+`~/.zcode/cli/.env` (same directory as `config.json`; override the location
+with `ZCODE_ENV_FILE`) and fill in your values:
+
+```bash
+mkdir -p ~/.zcode/cli
+cp .env.example ~/.zcode/cli/.env
+chmod 600 ~/.zcode/cli/.env
+```
+
+The minimum required content:
+
+```bash
+ZCODE_API_KEY=your-api-key
+ZCODE_MAIN_MODEL=glm-5.2
+```
+
+Optional entries (all documented inline in `.env.example`): the provider ID
+(`ZCODE_PROVIDER_ID`, default `zai`; use `zai` or `bigmodel` because the
+upstream login gate only recognizes API keys under those IDs), the display
+name, the wire protocol (`ZCODE_PROVIDER_KIND`: `anthropic`, `openai`, or
+`openai-compatible`), the endpoint root (`ZCODE_BASE_URL`), the lite model for
+lightweight/subagent work (`ZCODE_LITE_MODEL`), and extra models for the picker
+(`ZCODE_EXTRA_MODELS`, comma-separated `id` or `id:Display Name` entries).
+
+On every start zcode reads the file and syncs it into `config.json` before the
+runtime boots. The file is the authority for its own provider entry and the
+`model` block; other providers (for example credentials written by an OAuth
+login) and every unrelated config block are left untouched. A file without
+model settings is ignored, an absent file changes nothing, and invalid values
+stop startup with a clear error pointing at the offending entry. Deleting the
+file returns control to `config.json`.
+
+The file holds a live API key: keep it out of every repository and at mode 600.
 
 ### Coding Plan API key
 

@@ -1,12 +1,16 @@
-# zcode-cli
+# ZCode CLI
 
-![zcode-cli](./assets/logo.svg)
+<div align="center">
+
+![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
 [![Version](https://img.shields.io/badge/Version-3.8.1--16-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
-[English](README.md)
+[English](README.md) | 简体中文 | [繁體中文](README_zh_tw.md)
+
+</div>
 
 非官方的 ZCode 终端客户端，直接运行 ZCode Desktop 附带的官方 agent runtime。
 
@@ -17,7 +21,7 @@
 本项目与 Z.ai 无隶属关系、也未获其背书。ZCode 及其附带的 runtime 仍受上游条款约束；
 发布 npm 包前请先确认你有权再分发提取出的 runtime。
 
-![zcode-cli TUI demo](./docs/assets/demo.svg)
+![ZCode CLI TUI demo](./docs/assets/demo.svg)
 
 ## 快速开始
 
@@ -55,7 +59,7 @@ bun add -g zcode-app-cli@latest
 ```
 
 npm 包名为 `zcode-app-cli`（npm 上的 `zcode-cli` 名字已被无关包占用），
-项目与命令的展示名为 `zcode-cli` / `zcode`。固定使用 `@latest` 是有意为之：
+项目展示名为 **ZCode CLI**、命令为 `zcode`。固定使用 `@latest` 是有意为之：
 与 App 对齐的版本号采用 `3.3.5-2` 这类带 SemVer 预发布段的格式，`latest`
 标签始终指向最新验证过的「App 版本 + 构建号」发布。
 
@@ -66,7 +70,7 @@ zcode --update
 ```
 
 该命令经 `gh` CLI 从 GitHub Release 解析最新版本，下载 Release 上挂的
-`zcode-app-cli-<版本>.tgz` asset 后全局重装。GitHub Release 是唯一的更新
+`zcode-cli-<版本>.tgz` asset 后全局重装。GitHub Release 是唯一的更新
 渠道——每个 Release 都附带该 tarball asset。
 
 交互式启动时，每 20 小时至多检查一次 npm `latest` 标签（按已安装版本计），有新
@@ -345,6 +349,10 @@ ZCode 从 `~/.zcode/cli/config.json`（Windows 上为
 支持三种模型接入方式：Z.AI OAuth（仅 macOS）、Z.AI/BigModel Coding Plan
 API key、或带自定义 provider 的直连 API key。详细的设置步骤、重试 / 超时、主题
 与回合完成通知见[配置文档](./docs/CONFIGURATION.md)。
+
+另有扁平文件方式：把带注释的 `.env.example` 模板复制为 `~/.zcode/cli/.env`
+并填入 API key 与模型 ID——每次启动时 zcode 会先把它同步进 config.json 再拉起
+runtime，无需登录或手改 JSON。
 
 ## 本地开发
 

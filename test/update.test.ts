@@ -9,6 +9,7 @@ import {
   downloadReleaseTarball,
   isUpdateInvocation,
   packageName,
+  releaseAssetName,
   runSelfUpdate,
   updateRepository
 } from "../src/update.ts";
@@ -54,9 +55,9 @@ describe("self-update tarball download", () => {
         }
       }
     );
-    expect(tarball).toBe(join("/tmp/zcode-download", `${packageName}-3.3.5-2.tgz`));
+    expect(tarball).toBe(join("/tmp/zcode-download", releaseAssetName("3.3.5-2")));
     expect(requested).toHaveLength(1);
-    expect(requested[0]!.join(" ")).toContain(`--pattern ${packageName}-3.3.5-2.tgz`);
+    expect(requested[0]!.join(" ")).toContain(`--pattern ${releaseAssetName("3.3.5-2")}`);
     expect(requested[0]!.join(" ")).toContain(`--repo ${updateRepository}`);
   });
 
@@ -71,6 +72,10 @@ describe("self-update tarball download", () => {
   test("keeps the repository constant aligned with the project remote", () => {
     expect(updateRepository).toBe("xhqing/zcode-cli");
     expect(packageName).toBe("zcode-app-cli");
+  });
+
+  test("names release assets after the project, not the npm package", () => {
+    expect(releaseAssetName("3.3.5-2")).toBe("zcode-cli-3.3.5-2.tgz");
   });
 });
 
@@ -97,7 +102,7 @@ describe("self-update run", () => {
     });
 
     expect(code).toBe(0);
-    expect(installed).toEqual([join(temporary[0]!, `${packageName}-3.3.5-2.tgz`)]);
+    expect(installed).toEqual([join(temporary[0]!, releaseAssetName("3.3.5-2"))]);
     expect(streams.stdout.text()).toContain("Checking for zcode-cli updates…");
     expect(streams.stdout.text()).toContain("Current version : 3.3.5-1");
     expect(streams.stdout.text()).toContain("Latest version  : 3.3.5-2 (xhqing/zcode-cli release)");

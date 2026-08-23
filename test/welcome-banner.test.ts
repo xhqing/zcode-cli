@@ -32,15 +32,27 @@ describe("welcome banner", () => {
     for (const width of [48, 80, 120]) {
       const lines = banner(width);
       const output = lines.join("\n");
+      const plain = output.replace(/\x1b\[[0-9;]*m/gu, "");
 
-      expect(lines).toHaveLength(4);
-      expect(output).toContain("SYSTEM INITIATED");
-      expect(output).toContain("ZCODE  v3.3.5-2");
-      expect(output).toMatch(/(?:runtime|rt) v0\.15\.2/u);
-      expect(output).toContain("zcode-cli");
-      expect(output).toContain("branch main");
+      expect(lines).toHaveLength(5);
+      expect(plain).toContain("SYSTEM INITIATED");
+      expect(plain).toContain("ZCODE  v3.3.5-2");
+      expect(plain).toMatch(/(?:runtime|rt) v0\.15\.2/u);
+      expect(plain).toMatch(/branch \S+/u);
+      expect(plain).toContain("/quit │ Ctrl+D to exit");
       expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
     }
+  });
+
+  test("keeps the workspace an absolute path by truncating from the end", () => {
+    const plain = (value: string) => value.replace(/\x1b\[[0-9;]*m/gu, "");
+    // At 80 columns the full path plus branch fits without any truncation.
+    const wide = plain(banner(80).join("\n"));
+    expect(wide).toContain("/home/alice/work/zcode-cli · branch main");
+    // At 48 columns nothing fits whole; the leading "/" must survive.
+    const narrow = plain(banner(48).join("\n"));
+    expect(narrow).toMatch(/│ \/home\/alice\/work\/zco…/u);
+    expect(narrow).not.toMatch(/…code-cli/u);
   });
 
   test("does not change layouts for fixture-looking workspace paths", () => {
@@ -58,12 +70,13 @@ describe("welcome banner", () => {
     }
   });
 
-  test("switches to a compact two-line identity below the wide breakpoint", () => {
+  test("switches to a compact identity with exit hint below the wide breakpoint", () => {
     const lines = banner(WIDE_BANNER_MIN_WIDTH - 1);
 
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("ZCODE  v3.3.5-2");
     expect(lines[1]).toContain("zcode-cli · branch main");
+    expect(lines[2]).toContain("/quit");
   });
 
   test("never wraps at tiny or wide terminal widths", () => {

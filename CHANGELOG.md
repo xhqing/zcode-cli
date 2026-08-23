@@ -2,6 +2,36 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## Unreleased
+
+### 新增
+
+- **`~/.zcode/cli/.env` 扁平环境文件配置——免手改 config.json 的模型接入方式**（src/env-config.ts 新建、src/launcher.ts、.env.example 新建、.gitignore、test/env-config.test.ts 新建、docs/CONFIGURATION.md、README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：用户要配置直连 API key 此前只有手改嵌套 `config.json` 一条路（provider/model 两个块、模型 ID 大小写、provider ID 须为 `zai`/`bigmodel` 等约束都埋在 JSON 里，2026-08-23 用户就因从 OpenCode 抄来 `builtin:bigmodel` key + 缺 `model` 块而配置无效）；提供一份带详细注释的扁平 `.env` 模板，复制到 `~/.zcode/cli/.env` 填两个必填项（`ZCODE_API_KEY`、`ZCODE_MAIN_MODEL`）即可用，降低配置门槛、避免抄错格式。
+  - 改了什么：① 新建 src/env-config.ts——dotenv 风格解析（`KEY=value`、`#` 注释、引号剥离、未知变量忽略），`buildProviderConfig()` 校验并生成 provider/model 配置块（provider ID 默认 `zai`、kind 默认 `anthropic`、`zai`/`bigmodel` 有默认 baseURL、lite 模型缺省回落 main 模型、`ZCODE_EXTRA_MODELS` 支持 `id:显示名` 条目并自动补齐所选模型的声明）；② launcher 启动早期（ensureUserConfig 之后、login 检测与 runtime 拉起之前）调 `syncEnvFileToConfig()`——`.env` 是其自身 provider 条目与 `model` 块的权威源，合并写入 config.json，其它 provider（如 OAuth 登录写入的凭证）与其余配置块不动；无 `.env` / 无模型设置项时静默跳过，校验失败（如缺 `ZCODE_MAIN_MODEL`）则以明确报错退出（exit 1），同步成功会清除 setup-pending（首启向导不再弹出）；③ `.env` 路径默认 `~/.zcode/cli/.env`、`ZCODE_ENV_FILE` 可覆盖；④ 新建 `.env.example` 模板（每项变量带用途、默认值、取值示例与「provider ID 须为 `zai`/`bigmodel` 否则登录门禁不放行」等关键约束的英文注释），`.gitignore` 加 `.env` 防密钥误提交；⑤ 新增 test/env-config.test.ts 共 8 个用例（路径解析、dotenv 解析、build 校验与默认值、同步写入、无关块保留、缺文件静默、校验报错、无模型设置忽略）；⑥ 文档：CONFIGURATION.md 新增「Environment file (.env)」小节并在模型接入路径列表挂链、三版 README 配置节各加一段说明。
+- **欢迎横幅当前目录改为完整绝对路径显示**（packages/zcode-tui/src/welcome-banner.ts、test/welcome-banner.test.ts）。
+  - 为什么改：横幅信息面板宽度上限原为 52 列、路径 + branch 放不下时用「砍头」截断（`…rs/xhq/Documents/...`），绝对路径开头的 `/Users/...` 被砍掉，用户看不出这是绝对路径（尤其中文 macOS 默认路径 `/Users/<名>/Documents/...` 较长，宽终端上也截头）。
+  - 改了什么：① 信息面板宽度上限 52 → 72；② `locationLine()` 重写截断策略——完整路径 + 完整 branch 放得下就原样显示；放不下先压缩 branch（路径保完整）；实在不行路径截尾（保留开头 `/`，砍掉的是尾部），不再砍头；③ 紧凑模式 location 行同步由砍头改为截尾；④ 删除无调用方的 `truncateFromStart()`；⑤ 测试新增「绝对路径开头保留」断言（80 列完整显示、48 列截尾保头）。`bun run build:tui` 重建 dist。
+
+- **TUI 欢迎横幅常驻退出提示 + `/quit` 补进斜杠命令补全**（packages/zcode-tui/src/welcome-banner.ts、packages/zcode-tui/src/index.ts、test/welcome-banner.test.ts）。
+  - 为什么改：退出命令只认 `/quit` / `/exit`（带斜杠前缀），用户在界面里输入裸的 `quit` / `exit` / `quit()` 会被当作普通聊天消息发给模型——模型未配置时（Model config is missing）全部被拦截返回报错，看起来像「quit 失灵」，界面上又没有任何退出方式提示，新用户只能干瞪眼。
+  - 改了什么：① 欢迎横幅信息面板（宽横幅模式）与紧凑横幅各加一行常驻 muted 提示 `/quit │ Ctrl+D to exit`——宽横幅由 4 行变 5 行（品牌 Z 标志 4 行不够铺满第 5 行，改为信息面板驱动行数、Z 标志不足处补空格）、紧凑横幅由 2 行变 3 行；② `autocompleteCommands()` 的本地命令表在 `exit` 之外补上 `quit` 条目（此前输入 `/q` 无补全提示）；③ welcome-banner 测试断言同步（行数 4→5、2→3）并新增退出提示文案断言。`bun run build:tui` 重建 dist。
+- **新增繁體中文版 README，语言导航三语化**（README_zh_tw.md 新建、README.md、README_cn.md）。
+  - 为什么改：README 原只有英文 + 简体双语；用户要求补繁体版本，覆盖繁体中文读者。
+  - 改了什么：以简体版为底本整体转写繁体（台/港常用术语：套件 / 設定 / 外掛 / 檔案 / 指令 等），代码块、命令与链接保持原样；三版头部语言导航统一为「English | 简体中文 | 繁體中文」互链。
+- **README 头部改为居中排版（LOGO / 徽章 / 语言导航）**（README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：用户要求项目 LOGO、标准徽章、语言链接在 README 里居中展示。
+  - 改了什么：三版 README 的标题下方用 `<div align="center">` 包裹 LOGO、三枚标准徽章（License / Version / Type）与语言导航行。
+- **项目展示名统一为「ZCode CLI」**（README.md、README_cn.md、README_zh_tw.md、assets/logo.svg）。
+  - 为什么改：用户要求 README 项目名称与 LOGO 内项目名统一用「ZCode CLI」（此前 README 标题为小写 `zcode-cli`、LOGO 文字为 `zcode-cli_`）。
+  - 改了什么：三版 README 的 `# 标题`、LOGO / demo 图 alt 文本、「安装与更新」节的展示名表述改为 **ZCode CLI**；LOGO 主标题文字改为 `ZCode CLI_`、aria-label 同步。
+- **项目 LOGO 重设计：左侧大写 Z + 赛博朋克风格**（assets/logo.svg）。
+  - 为什么改：用户要求 LOGO 左侧图形改用大写「Z」、整体走赛博朋克设计风格（原为青蓝渐变色卡 + 终端 `>_` 主题）。
+  - 改了什么：深蓝紫渐变底（#0B0E1F → #1B1033）+ 极淡青色网格线（裁剪进圆角框内）；大写 Z 主体为青色渐变（#67E8F9 → #22D3EE）+ 高斯模糊霓虹发光 + 切角笔画；品红色（#E879F9）错位残影与两道 glitch 切片制造故障感；右侧主标题 `ZCode CLI_`（青色 + 白色 + 光标下划线）配灰色副标题。外轮廓保持 640×200 圆角矩形 rx=28（符合 icon-design 规范）。
+- **发布构建产物名统一为 `zcode-cli-<version>.tgz`**（scripts/pack-release.ts、src/update.ts、.github/workflows/publish.yml、test/update.test.ts、test/release-workflows.test.ts、README.md、README_cn.md、README_zh_tw.md、docs/RELEASING.md）。
+  - 为什么改：Release asset 名原跟随 npm 包名（`zcode-app-cli-<version>.tgz`），与项目展示名 ZCode CLI 不一致；用户要求产物名统一为 `zcode-cli-{version}.tgz`。
+  - 改了什么：① pack-release.ts 在 `npm pack` 产出后将 tarball 由包名重命名为 `zcode-cli-<version>.tgz`，`release.json` 的 `tarball` 路径随之变化；② update.ts 新增 `releaseAssetName()`（单一命名口径），`gh release download --pattern` 与下载期望路径改用它，进度输出同步；③ publish.yml 两处 `gh release upload` 改传 `.release/zcode-cli-${PACKAGE_VERSION}.tgz`；「Rebuild tarball」步骤在 `cmp` 比对前把重 pack 出的包名 tarball 重命名回 asset 名，避免改名后比对必然失败；④ 测试同步（update.test.ts 改用 `releaseAssetName` 并新增命名断言、release-workflows.test.ts 两处 upload 断言改为字面 asset 名）；⑤ 三版 README 与 docs/RELEASING.md 的产物名表述同步。**注意**：npm 包名 `zcode-app-cli` 与包内安装路径不变——重命名只影响 Release asset 文件名。
+
 ## 3.8.1-16
 
 ### 变更

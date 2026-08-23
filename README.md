@@ -1,12 +1,16 @@
-# zcode-cli
+# ZCode CLI
 
-![zcode-cli](./assets/logo.svg)
+<div align="center">
+
+![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
 [![Version](https://img.shields.io/badge/Version-3.8.1--16-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
-[简体中文](README_cn.md)
+English | [简体中文](README_cn.md) | [繁體中文](README_zh_tw.md)
+
+</div>
 
 Unofficial terminal client for the official agent runtime shipped with ZCode Desktop.
 
@@ -20,7 +24,7 @@ This project is not affiliated with or endorsed by Z.ai. ZCode and its bundled
 runtime remain subject to their upstream terms. Confirm that you are allowed to
 redistribute the extracted runtime before publishing the npm package.
 
-![zcode-cli TUI demo](./docs/assets/demo.svg)
+![ZCode CLI TUI demo](./docs/assets/demo.svg)
 
 ## Quick start
 
@@ -60,8 +64,8 @@ bun add -g zcode-app-cli@latest
 ```
 
 The npm package is named `zcode-app-cli` (the `zcode-cli` name on npm is
-owned by an unrelated package); the project and command are called
-`zcode-cli` / `zcode`. Using `@latest` is intentional because the
+owned by an unrelated package); the project is called **ZCode CLI** and the
+command is `zcode`. Using `@latest` is intentional because the
 App-aligned release format uses a SemVer prerelease segment such as
 `3.3.5-2`. The tag always points to the newest validated App-plus-build
 release.
@@ -75,7 +79,7 @@ zcode --update
 The command resolves the newest release from GitHub Releases (via the `gh`
 CLI), downloads the release tarball asset, and reinstalls it globally.
 GitHub Releases are the only update channel — every release carries the
-`zcode-app-cli-<version>.tgz` asset that this command installs.
+`zcode-cli-<version>.tgz` asset that this command installs.
 
 Interactive startup checks the npm `latest` tag at most once every 20 hours
 per installed version and shows a cached newer version as a non-blocking
@@ -418,6 +422,11 @@ Three model-access paths are supported: Z.AI OAuth (macOS only), Z.AI/BigModel
 Coding Plan API key, or a direct API key with a custom provider. For detailed
 setup steps, retries/timeouts, theme, and turn-completion notifications, see
 [Configuration](./docs/CONFIGURATION.md).
+
+As a flat-file alternative, copy the commented `.env.example` template to
+`~/.zcode/cli/.env` and fill in your API key and model IDs: on every start
+zcode syncs that file into config.json before the runtime boots, no login or
+JSON editing required.
 
 ## Local development
 

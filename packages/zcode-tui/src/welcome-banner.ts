@@ -18,7 +18,7 @@ export const BRAND_MARK: readonly string[] = [
 export const BRAND_MARK_WIDTH = 10;
 export const WIDE_BANNER_MIN_WIDTH = 48;
 
-const maxInformationWidth = 52;
+const maxInformationWidth = 72;
 const boxTitle = "── SYSTEM INITIATED ";
 
 export interface WelcomeBannerOptions {
@@ -30,19 +30,6 @@ export interface WelcomeBannerOptions {
 
 function bannerText(value: string): string {
   return sanitizeTerminalText(value, { preserveSgr: false }).replace(/\s+/gu, " ").trim();
-}
-
-function truncateFromStart(value: string, width: number): string {
-  if (width <= 0) return "";
-  if (visibleWidth(value) <= width) return value;
-  if (width === 1) return "…";
-  const suffix: string[] = [];
-  for (const character of Array.from(value).reverse()) {
-    const candidate = `${character}${suffix.join("")}`;
-    if (visibleWidth(`…${candidate}`) > width) break;
-    suffix.unshift(character);
-  }
-  return `…${suffix.join("")}`;
 }
 
 function padTerminalText(value: string, width: number): string {
@@ -102,29 +89,45 @@ export class WelcomeBanner implements Component {
       ? fullVersionLine
       : compactVersionLine;
     const locationLine = this.locationLine(panelContentWidth);
+    // The exit hint must stay visible without the autocomplete list: plain
+    // "quit"/"exit" reads as chat input, only the /-prefixed forms exit.
+    const exitHint = "/quit │ Ctrl+D to exit";
     const information = [
       this.theme.muted(boxRule("┌", panelWidth)),
       `${this.theme.muted("│")} ${padTerminalText(versionLine, panelContentWidth)}`,
       `${this.theme.muted("│")} ${this.theme.muted(padTerminalText(locationLine, panelContentWidth))}`,
+      `${this.theme.muted("│")} ${this.theme.muted(padTerminalText(exitHint, panelContentWidth))}`,
       this.theme.muted(boxRule("└", panelWidth))
     ];
 
-    return BRAND_MARK.map((line, index) => (
-      ` ${this.theme.accent(line)}${gap}${information[index] ?? ""}`
+    const blank = " ".repeat(BRAND_MARK_WIDTH);
+    return information.map((line, index) => (
+      ` ${this.theme.accent(BRAND_MARK[index] ?? blank)}${gap}${line}`
     ));
   }
 
   private locationLine(width: number): string {
-    if (!this.branch) return truncateFromStart(this.workspace, width);
+    if (!this.branch) return truncateToWidth(this.workspace, width, "…");
     const separator = " · ";
-    const branchWidth = Math.max(8, Math.min(
-      visibleWidth(`branch ${this.branch}`),
-      Math.floor(width * 0.45)
-    ));
-    const branch = truncateToWidth(`branch ${this.branch}`, branchWidth, "…");
-    const workspaceWidth = width - visibleWidth(separator) - visibleWidth(branch);
-    if (workspaceWidth < 4) return truncateToWidth(branch, width, "…");
-    return `${truncateFromStart(this.workspace, workspaceWidth)}${separator}${branch}`;
+    // Keep the workspace an intact absolute path whenever it fits: shrink the
+    // branch label first, and truncate the path from the end (not the start)
+    // only as a last resort so the leading "/" stays visible.
+    const separatorWidth = visibleWidth(separator);
+    const fullBranch = `branch ${this.branch}`;
+    if (visibleWidth(this.workspace) + separatorWidth + visibleWidth(fullBranch) <= width) {
+      return `${this.workspace}${separator}${fullBranch}`;
+    }
+    const workspaceWidth = visibleWidth(this.workspace);
+    const branchBudget = Math.max(0, width - workspaceWidth - separatorWidth);
+    if (branchBudget >= visibleWidth("branch…")) {
+      const branch = truncateToWidth(fullBranch, branchBudget, "…");
+      return `${this.workspace}${separator}${branch}`;
+    }
+    const branchWidth = Math.max(8, Math.floor(width * 0.25));
+    const branch = truncateToWidth(fullBranch, branchWidth, "…");
+    const pathBudget = width - separatorWidth - visibleWidth(branch);
+    if (pathBudget < 4) return truncateToWidth(fullBranch, width, "…");
+    return `${truncateToWidth(this.workspace, pathBudget, "…")}${separator}${branch}`;
   }
 
   private renderCompact(width: number): string[] {
@@ -136,7 +139,8 @@ export class WelcomeBanner implements Component {
       .join(" · ");
     return [
       ` ${truncateToWidth(identity, contentWidth)}`,
-      ` ${this.theme.muted(truncateFromStart(location, contentWidth))}`
+      ` ${this.theme.muted(truncateToWidth(location, contentWidth, "…"))}`,
+      ` ${this.theme.muted(truncateToWidth("/quit │ Ctrl+D to exit", contentWidth))}`
     ];
   }
 }

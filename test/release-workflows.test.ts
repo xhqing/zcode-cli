@@ -227,9 +227,9 @@ describe("release workflows", () => {
       (step) => step.name === "Attach tarball to an existing GitHub Release"
     );
     expect(createRelease?.run).toContain("gh release create");
-    expect(createRelease?.run).toContain("gh release upload \"$TAG\" \".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz\" --clobber");
+    expect(createRelease?.run).toContain("gh release upload \"$TAG\" \".release/zcode-cli-${PACKAGE_VERSION}.tgz\" --clobber");
     expect(attachStep?.if).toBe("steps.release.outputs.enabled == 'true' && steps.release.outputs.create_release == 'false'");
-    expect(attachStep?.run).toBe("gh release upload \"$TAG\" \".release/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz\" --clobber");
+    expect(attachStep?.run).toBe("gh release upload \"$TAG\" \".release/zcode-cli-${PACKAGE_VERSION}.tgz\" --clobber");
 
     expect(source).not.toContain("NPM_TOKEN");
     expect(source).not.toContain("npm@latest");

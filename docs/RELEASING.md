@@ -150,7 +150,8 @@ bun run release:pack
 `release:build` runs TypeScript checking and all tests, downloads the artifact
 from `zcode-runtime.lock.json`, verifies its SHA-512, builds and injects the TUI,
 then runs runtime and PTY smoke tests. `release:pack` runs the offline
-`prepack` guard, creates `.release/zcode-app-cli-<version>.tgz`, audits every
+`prepack` guard, creates `.release/zcode-cli-<version>.tgz` (the `npm pack`
+output `zcode-app-cli-<version>.tgz` is renamed after the project), audits every
 included path and executable mode, installs it into a temporary directory, and
 runs the installed `zcode --version`. Its final size, integrity and file count
 are written to `.release/release.json`.

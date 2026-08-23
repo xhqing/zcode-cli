@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,7 +105,12 @@ export async function packRelease(): Promise<void> {
   const result = parsePackResult(stdout);
   const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as PackageIdentity;
   validatePackResult(result, packageJson);
-  const tarball = join(destination, result.filename);
+  // The release asset is named after the project (zcode-cli), not the npm
+  // package (zcode-app-cli); GitHub Release and `zcode --update` agree on it.
+  const assetName = `zcode-cli-${result.version}.tgz`;
+  const packed = join(destination, result.filename);
+  const tarball = join(destination, assetName);
+  await rename(packed, tarball);
   const release = {
     name: result.name,
     version: result.version,

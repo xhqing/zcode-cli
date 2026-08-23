@@ -20,6 +20,7 @@ import {
   readConfiguredModelAccess,
   readSetupPending
 } from "./model-access.ts";
+import { syncEnvFileToConfig } from "./env-config.ts";
 import {
   classifyZaiOAuthInvocation,
   runZaiOAuthLogin,
@@ -436,6 +437,23 @@ export async function main(args: string[]): Promise<number> {
     } else {
       setupPending = await readSetupPending();
     }
+  } catch (error) {
+    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  // Sync ~/.zcode/cli/.env into config.json before anything reads model
+  // settings: the login check below and the runtime both see the result.
+  try {
+    const envSync = await syncEnvFileToConfig();
+    if (envSync.error) {
+      console.error(
+        `Error: invalid ${envSync.envPath}: ${envSync.error}.\n`
+        + "Fix the file or remove it to keep using the current config.json."
+      );
+      return 1;
+    }
+    if (envSync.applied) setupPending = false;
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
