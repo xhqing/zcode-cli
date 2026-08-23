@@ -29,6 +29,7 @@ import {
 import { requestAppServer } from "./app-server-client.ts";
 import { runPluginCommand } from "./plugin-cli.ts";
 import { isUpdateInvocation, runSelfUpdate } from "./update.ts";
+import { isStatsInvocation, runStatsReport } from "./usage.ts";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageManifestPath = join(packageRoot, "package.json");
@@ -426,6 +427,10 @@ export async function main(args: string[]): Promise<number> {
       console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       return 1;
     }
+  }
+
+  if (isStatsInvocation(args)) {
+    return await runStatsReport({ args });
   }
 
   let setupPending = false;

@@ -22,24 +22,22 @@ function banner(width: number, color = false): string[] {
 }
 
 describe("welcome banner", () => {
-  test("uses a four-line cyberpunk Z mark with a glitch ghost layer", () => {
+  test("uses a four-line block-art Z mark", () => {
     expect(BRAND_MARK).toHaveLength(4);
     for (const line of BRAND_MARK) {
       expect(visibleWidth(line)).toBe(BRAND_MARK_WIDTH);
       expect(line).toMatch(/^[\u0020\u2580-\u259f]+$/u);
     }
-    // The ghost must be offset from the Z so the merged mark shows an echo.
     expect(BRAND_MARK.some((line) => line !== BRAND_MARK[0])).toBe(true);
   });
 
-  test("paints the Z in accent and the ghost in the brand ghost color", () => {
+  test("paints the Z mark in the accent color", () => {
     const view = new WelcomeBanner(createTheme(true), {
       runtimeVersion: "0.15.2",
       workspace: "/tmp/project"
     });
     const output = view.render(80).join("\n");
     expect(output).toContain("\x1b[38;5;75m"); // cyan Z cells
-    expect(output).toContain("\x1b[38;5;213m"); // magenta ghost cells
   });
 
   test("collapses the home directory prefix to ~", () => {
@@ -83,7 +81,7 @@ describe("welcome banner", () => {
     expect(wide).toContain("/home/alice/work/zcode-cli · branch main");
     // At 48 columns nothing fits whole; the leading "/" must survive.
     const narrow = plain(banner(48).join("\n"));
-    expect(narrow).toMatch(/│ \/home\/alice\/work\/z…/u);
+    expect(narrow).toMatch(/│ \/home\/alice\/work\/zco…/u);
     expect(narrow).not.toMatch(/…code-cli/u);
   });
 

@@ -2,6 +2,31 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## Unreleased
+
+### 变更
+
+- **欢迎横幅品牌 Z 标志回退为简约单色版（撤销赛博朋克双层残影）**（packages/zcode-tui/src/welcome-banner.ts、packages/zcode-tui/src/theme.ts、test/welcome-banner.test.ts）。
+  - 为什么改：3.8.1-18 把横幅 Z 标志改成了「青色 Z + 品红错位残影」的赛博朋克双层结构（与项目 LOGO 同风格），用户试用后要求横幅里的 Z 图像回归之前的简约模式、不要赛博朋克风。
+  - 改了什么：① 删除 `BRAND_GHOST` 残影层与逐列合并渲染（`mergeBrandLine()` / `brandMarkLine()` / `brandCell()`），`BRAND_MARK` 回到 4 行 10 列的单层块画 Z，直接以 accent 色整体着色；② theme.ts 删除 `brandGhost` 主题色（唯一调用方就是残影层，无其它引用）；③ 测试同步：双层残影用例改回单层块画断言、删除品红 ghost 颜色断言、48 列截断断言随标志宽度 12 → 10 列调整。`bun run build:tui` 重建 dist。
+- **新增 `zcode stats` 用量统计子命令：按 provider 聚合 token 与积分消耗**（src/usage.ts 新建、src/env-config.ts、src/launcher.ts、test/usage.test.ts 新建、test/env-config.test.ts、.env.example、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
+  - 为什么改：① 用户要求用量统计且明确统计内容为输入 token、缓存命中 token、缓存命中率、输出 token，以及输入 / 缓存 / 输出三项消耗积分——此前 TUI 只有单会话退出时的 token 汇总行，不落盘、无积分；命令名用户指定为 `zcode stats`；② 积分口径要与 ZCode Desktop 一致——逆向 Desktop host 进程确认其「个人套餐」页积分来自 BigModel monitor 接口（`credit-usage/usage-detail`，需 OAuth 双 JWT，CLI 端 runtime 无此调用），但官方公开文档（docs.bigmodel.cn/cn/coding-plan/overview）给出了同一套抵扣公式与系数，Desktop 的「应用用量」页同样按本地历史估算，故采用官方系数本地估算，口径一致且无需鉴权；③ 曾按「每把 key 起名（`ZCODE_KEY_NAME`）分组」实现，用户随后裁定撤销按 key 分组——统计维度回归 provider。
+  - 改了什么：① 新建 src/usage.ts——Node 22 内置 `node:sqlite` 只读打开 `~/.zcode/cli/db/db.sqlite`，按 provider 聚合 `model_usage` 的 input / cache_read / output token 与请求数、错误数（key 脱敏为前 4 + 后 4 位，`builtin:` 前缀 OAuth 套餐标注 built-in plan），计算缓存命中率（命中 ÷ 输入侧总量）；按官方 GLM Coding Plan 系数（GLM-5.3/5.2/5.1 = 6.9/1.7/24、GLM-5-Turbo = 5.7/1.5/21、GLM-4.7 = 4.6/1.2/16，积分 = token × 系数 ÷ 10000，非高峰时段（工作日 14:00–18:00 UTC+8 之外）按 50% 抵扣）逐请求估算输入 / 缓存 / 输出三项积分并汇总；无系数表的模型跳过积分并标注 `estimated`；② launcher 路由 `zcode stats` / `zcode stats --json`；③ 文档同步（.env.example、三版 README「用量统计」节、CONFIGURATION.md「Usage stats per API key」节）。`bun run build:launcher` 重建，本机实测 OAuth 套餐 / bigmodel key / 自定义 provider 各自成组、命中率与积分输出正确。
+- **`zcode stats` 积分估算新增促销倍率 `ZCODE_STATS_CREDIT_MULTIPLIER`**（src/usage.ts、src/env-config.ts、test/usage.test.ts、test/env-config.test.ts、.env.example、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
+  - 为什么改：用户指出积分按官方系数表硬算不可行——官方存在限时折扣（如 ZCode 限时 1.5 倍用量 ≈ 67% 积分抵扣，至 2026-08-31），且问「zcode-cli 会被官方认定为 ZCode 享受该优惠吗」；查证（本机 rollout 记录的实际请求头）确认 zcode-cli 的模型请求由官方原版 runtime 发出、自带 `User-Agent: ZCode/<版本>`、`x-zcode-app-version` 等标识，服务端按 ZCode 认定、优惠同样适用；但服务端响应不含实际扣减积分数（raw_usage_json 只有 token），本地估算需显式叠加折扣系数。
+  - 改了什么：① `.env` 新增 `ZCODE_STATS_CREDIT_MULTIPLIER`（默认 1，促销期设如 `0.67`），同步写入 config.json 的 `usage.creditMultiplier`；② `zcode stats` 的积分估算在该倍率上缩放，报告标题与每 key 积分行标注 `(×0.67 promo multiplier)`；③ 测试补促销倍率用例（computeCredits 乘数、config 读取、报告标注），全量 579 测试通过。
+  - **后续撤销（同日）**：monitor 真实积分接入后用户裁定「不要自己算，要官方后端的真实数据」，该倍率机制整体移除（见下方撤销条目）。
+- **`zcode stats` 新增厂商真实积分报告：用 `zcode login` 存下的 OAuth 凭据直调 BigModel monitor 接口**（src/usage.ts、test/usage.test.ts、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
+  - 为什么改：用户追问「真实积分只在 BigModel monitor 接口里（需 OAuth 双 JWT）——拿不到 OAuth 双 JWT 吗」；查证发现拿得到——`zcode login` 登录后双 JWT 就存本机共享凭据库 `~/.zcode/v2/credentials.json`（`zcodejwttoken` + `oauth:bigmodel:access_token`，AES-256-GCM `enc:v1:` 加密，密钥为本机可派生的 fallback 口令 SHA-256，与 runtime 同算法）；实测解密后仅用 `oauth:bigmodel:access_token` 一个 `authorization` 头即可调通 `bigmodel.cn/api/monitor/credit-usage/usage-detail`（与 ZCode Desktop 用量页同源接口），拿到服务端记账的真实积分（已含促销与非高峰折扣）。
+  - 改了什么：① src/usage.ts 新增 `decryptCredential()`（runtime 同款 AES-256-GCM 解密，`ZCODE_CREDENTIAL_SECRET` 可覆盖密钥）、`credentialsFilePath()`、`fetchBigModelSpendReport()`（读凭据 → 解 BigModel token → 调 monitor 近 30 天 usage-detail；逐小时数组字段按 `sumSeries()` 求和；任何失败返回 undefined）；② `runStatsReport()` 先试拉真实积分（`options.fetchSpendReport` 可测试注入），成功则报告末尾追加「Vendor spend report (real credits)」段——按模型列真实总积分 + 输入 / 缓存 / 输出三桶积分 + token 数，本地估算行同步标注 `(estimated)` 以示区分；无凭据 / 网络失败静默省略、退回纯本地估算；③ 测试补 5 个用例（凭据路径、加解密往返、monitor 响应解析含数组求和、失败降级、报告段渲染），全量 583 测试通过。本机实测输出：近 30 天真实消耗 118,308.9 积分（glm-5.3 = 63,460.3：输入 2,966.3 + 缓存 58,308.7 + 输出 2,185.3）。
+  - 边界说明：真实积分报告是**账号维度**（monitor 接口按登录账号记账），不区分本地 provider 分组；按 provider 的积分仍为本地估算（按官方系数，不含促销折扣）。monitor 数据仅 BigModel OAuth 登录用户可得，直连第三方 key 不涉及。
+- **撤销按 key 分组与 `ZCODE_KEY_NAME`，统计维度回归 provider**（src/usage.ts、src/env-config.ts、test/usage.test.ts、test/env-config.test.ts、.env.example、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
+  - 为什么改：用户裁定「按 key 分组统计的功能撤销，不需要了，也不需要设置 key-name 了」——多 key 需求不再存在（真实积分已按账号维度从 monitor 接口拉取，key 级区分失去意义）。
+  - 改了什么：① `.env` 变量表删除 `ZCODE_KEY_NAME`，`buildProviderConfig()` 的 provider 显示名缺省值回归 `displayName(providerId)`；config.json 不再写 `keyName:<providerId>` 标签（`usage.creditMultiplier` 保留）；② src/usage.ts 删除 key-name 三级回落（keyName 字段、usage 块标签读取），分组直接以 provider ID 展示（`ProviderStats`），报告标题与汇总行改为 "Model usage by provider" / "All providers"；③ 测试同步（删 key-name 用例、改 provider 断言）；④ 文档同步。全量 582 测试通过。
+- **撤销促销倍率 `ZCODE_STATS_CREDIT_MULTIPLIER`：积分一律以 monitor 服务端真实数据为准**（src/usage.ts、src/env-config.ts、test/usage.test.ts、test/env-config.test.ts、.env.example、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
+  - 为什么改：用户裁定「不要自己算，我要的是官方后端的真实数据」——monitor 真实积分报告已包含全部促销与折扣，本地手工配倍率既多余又不准（0.67 只是近似换算）。
+  - 改了什么：① `.env` 变量表删除 `ZCODE_STATS_CREDIT_MULTIPLIER`，env 同步不再写 config.json 的 `usage.creditMultiplier`（`parseCreditMultiplier()` 删除）；② `computeCredits()` 删除倍率参数、回归纯官方系数；`StatsTotals` 删 `creditMultiplier` 字段；报告标题与积分行不再显示促销倍率标注；③ 测试同步（删倍率用例）；④ 文档同步（.env.example 删「Usage stats」节、三版 README 与 CONFIGURATION.md 删倍率说明，真实积分表述提前）。
+
 ## 3.8.1-18
 
 ### 变更

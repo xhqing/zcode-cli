@@ -9,27 +9,15 @@ import {
 import { sanitizeTerminalText } from "./terminal-text.ts";
 import type { ZCodeTheme } from "./theme.ts";
 
-/**
- * A terminal interpretation of the cyberpunk Z in the project LOGO: the cyan
- * chamfered Z is drawn on top of a magenta chromatic ghost offset down-right,
- * so the ghost peeks through the gaps like a glitch echo. All cells are
- * single-width blocks (U+2580-U+259F) or spaces, so plain indexing is safe.
- */
-const BRAND_Z: readonly string[] = [
-  "█████ ▄███  ",
-  "    ▄██▀    ",
-  "  ▄██▀      ",
-  "▄███ █████  "
+/** A terminal interpretation of the split, diagonal Z in the Desktop app icon. */
+export const BRAND_MARK: readonly string[] = [
+  "█████ ▄███",
+  "    ▄██▀  ",
+  "  ▄██▀    ",
+  "▄███ █████"
 ];
 
-const BRAND_GHOST: readonly string[] = [
-  "            ",
-  "  █████ ▄███",
-  "      ▄██▀  ",
-  "    ▄██▀    "
-];
-
-export const BRAND_MARK_WIDTH = 12;
+export const BRAND_MARK_WIDTH = 10;
 export const WIDE_BANNER_MIN_WIDTH = 48;
 
 const maxInformationWidth = 72;
@@ -55,24 +43,6 @@ function boxRule(prefix: "┌" | "└", width: number): string {
   const content = prefix === "┌" ? boxTitle : "";
   return `${prefix}${content}${"─".repeat(Math.max(0, width - 1 - visibleWidth(content)))}`;
 }
-
-function brandCell(layer: string, column: number): string {
-  return layer[column] ?? " ";
-}
-
-/** Merge the brand layers for plain-text use, with the cyan Z on top. */
-function mergeBrandLine(z: string, ghost: string): string {
-  let line = "";
-  for (let column = 0; column < BRAND_MARK_WIDTH; column += 1) {
-    const zCell = brandCell(z, column);
-    line += zCell !== " " ? zCell : brandCell(ghost, column);
-  }
-  return line;
-}
-
-export const BRAND_MARK: readonly string[] = BRAND_Z.map((line, index) =>
-  mergeBrandLine(line, BRAND_GHOST[index] ?? "")
-);
 
 export class WelcomeBanner implements Component {
   private readonly branch?: string;
@@ -133,23 +103,8 @@ export class WelcomeBanner implements Component {
     ];
 
     return information.map((line, index) => (
-      ` ${this.brandMarkLine(index)}${gap}${line}`
+      ` ${this.theme.accent(BRAND_MARK[index] ?? "")}${gap}${line}`
     ));
-  }
-
-  /** Paint the merged brand mark: cyan Z cells with the magenta ghost in the gaps. */
-  private brandMarkLine(index: number): string {
-    const z = BRAND_Z[index] ?? "";
-    const ghost = BRAND_GHOST[index] ?? "";
-    let line = "";
-    for (let column = 0; column < BRAND_MARK_WIDTH; column += 1) {
-      const zCell = brandCell(z, column);
-      const ghostCell = brandCell(ghost, column);
-      if (zCell !== " ") line += this.theme.accent(zCell);
-      else if (ghostCell !== " ") line += this.theme.brandGhost(ghostCell);
-      else line += " ";
-    }
-    return line;
   }
 
   /** Collapse the home directory prefix to "~", the way shell prompts do. */

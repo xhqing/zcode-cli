@@ -40,6 +40,7 @@ zcode
 
 - [快速开始](#快速开始)
 - [安装与更新](#安装与更新)
+- [用量统计](#用量统计)
 - [架构](#架构)
 - [功能特性](#功能特性)
 - [工作区集成](#工作区集成)
@@ -77,6 +78,28 @@ zcode --update
 可关闭。
 
 正常安装只需 Node.js，无原生 PTY 扩展、无 postinstall 构建步骤。
+
+## 用量统计
+
+```bash
+zcode stats          # 人类可读报告
+zcode stats --json   # 机器可读 JSON
+```
+
+ZCode runtime 会把每次模型请求记录到本地 SQLite 数据库
+（`~/.zcode/cli/db/db.sqlite`）。`zcode stats` 按 **provider**（即
+`~/.zcode/cli/config.json` 里的每个 provider 条目）聚合历史用量，API key
+脱敏为前 4 位与后 4 位。每段列出请求数与错误数、**输入 token、缓存命中
+token 与命中率、输出 token**，并按官方 GLM Coding Plan 系数（积分 = token ×
+系数 ÷ 10000，非高峰时段 5 折）估算**分输入 / 缓存 / 输出三项的积分消耗**；
+无公开系数表的模型跳过并标注。末行汇总全部 provider。
+
+zcode-cli 的模型请求由官方 ZCode runtime 发出（请求头带
+`User-Agent: ZCode/<版本>`），官方针对 ZCode 的促销优惠同样适用。本机存有
+`zcode login` 登录的 BigModel OAuth 凭据时，`zcode stats` 会调用厂商 monitor
+接口（与 ZCode Desktop 用量页同源），追加一份**服务端真实积分报告**——按模型
+列出实际抵扣积分（已含促销与非高峰折扣），并分输入 / 缓存 / 输出三桶。无凭据
+或请求失败时省略该段、仅保留本地估算。
 
 ## 架构
 

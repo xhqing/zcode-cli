@@ -73,6 +73,25 @@ inline API key, plain `zcode login` exits successfully and explains that OAuth
 is unnecessary. This prevents a custom provider from being replaced by an
 unrelated login flow.
 
+## Usage stats per API key
+
+`zcode stats` prints a usage report grouped by provider, aggregated from the
+local SQLite database the runtime maintains at `~/.zcode/cli/db/db.sqlite`
+(`%USERPROFILE%\.zcode\cli\db\db.sqlite` on Windows). Each group shows the
+provider ID with the masked API key, request/error counts, input tokens,
+cache-hit tokens with hit rate, output tokens, and estimated credit
+consumption split into input / cache / output buckets (official GLM Coding
+Plan rates: credits = tokens × rate ÷ 10000; off-peak hours at 50%).
+`zcode stats --json` emits the same data as JSON for scripting.
+
+zcode-cli sends requests through the official ZCode runtime (requests carry
+`User-Agent: ZCode/<version>`), so ZCode-targeted vendor promotions apply
+here too. When the BigModel OAuth token stored by `zcode login` is available,
+`zcode stats` queries the vendor monitor API (the same one the ZCode desktop
+usage page calls) and appends a real server-side spend report: actual
+deducted credits per model with input / cache / output buckets. A missing
+token or a failed request silently omits the section.
+
 ### Environment file (.env)
 
 Instead of hand-editing the nested `config.json`, keep model settings in a

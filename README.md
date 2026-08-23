@@ -45,6 +45,7 @@ Reopen it anytime with `/setup`; press Esc to skip.
 
 - [Quick start](#quick-start)
 - [Install and update](#install-and-update)
+- [Usage stats](#usage-stats)
 - [Architecture](#architecture)
 - [Features](#features)
 - [Workspace integration](#workspace-integration)
@@ -86,6 +87,33 @@ link. CI environments skip the check automatically. Set
 
 A normal installation requires only Node.js and has no native PTY addon or
 postinstall build step.
+
+## Usage stats
+
+```bash
+zcode stats          # human-readable report
+zcode stats --json   # machine-readable JSON
+```
+
+The ZCode runtime records every model request in a local SQLite database
+(`~/.zcode/cli/db/db.sqlite`). `zcode stats` aggregates that history **per
+provider** (one section per provider entry in `~/.zcode/cli/config.json`,
+with the API key masked to its first and last four characters). Each section
+lists request/error counts, **input tokens, cache-hit tokens with hit rate,
+and output tokens**, plus estimated **credit consumption split into input /
+cache / output buckets** using the official GLM Coding Plan rates (credits =
+tokens × rate ÷ 10000; off-peak hours deduct at 50%). Models without a
+published rate table are skipped and flagged. A final line sums all
+providers.
+
+zcode-cli sends requests through the official ZCode runtime (the request
+carries `User-Agent: ZCode/<version>`), so vendor promotions that apply to
+ZCode apply here too. When the BigModel OAuth token from `zcode login` is
+present, `zcode stats` queries the vendor monitor API (the same one the ZCode
+desktop usage page uses) and appends a **real server-side spend report** —
+actual deducted credits per model including all promotions and off-peak
+discounts, split into input / cache / output buckets. No token or request
+failure simply omits the section and keeps the local estimate.
 
 ## Architecture
 
