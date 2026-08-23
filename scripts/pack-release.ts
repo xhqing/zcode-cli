@@ -105,8 +105,8 @@ export async function packRelease(): Promise<void> {
   const result = parsePackResult(stdout);
   const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as PackageIdentity;
   validatePackResult(result, packageJson);
-  // The release asset is named after the project (zcode-cli), not the npm
-  // package (zcode-app-cli); GitHub Release and `zcode --update` agree on it.
+  // The release asset is named after the project (zcode-cli); GitHub Release
+  // and `zcode --update` agree on it.
   const assetName = `zcode-cli-${result.version}.tgz`;
   const packed = join(destination, result.filename);
   const tarball = join(destination, assetName);

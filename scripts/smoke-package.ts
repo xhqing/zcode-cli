@@ -43,7 +43,7 @@ export async function smokePackagedCli(tarball: string): Promise<void> {
     ], root);
     if (install.code !== 0) throw new Error(`npm install smoke test failed with status ${install.code}`);
 
-    const packageRoot = join(temporaryDirectory, "node_modules", "zcode-app-cli");
+    const packageRoot = join(temporaryDirectory, "node_modules", "zcode-cli");
     const packageManifest = JSON.parse(
       await readFile(join(packageRoot, "package.json"), "utf8")
     ) as { version?: string };

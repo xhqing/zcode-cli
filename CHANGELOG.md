@@ -2,6 +2,24 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-18
+
+### 变更
+
+- **欢迎横幅路径用户目录以 `~` 占位 + 品牌 Z 标志重绘为赛博朋克双层（与项目 LOGO 同风格）**（packages/zcode-tui/src/welcome-banner.ts、packages/zcode-tui/src/theme.ts、test/welcome-banner.test.ts）。
+  - 为什么改：① 横幅显示的当前目录是完整绝对路径，`/Users/<用户名>/...` 把本机用户名亮在界面上（README 演示图脱敏时也特意把这类路径改成 `~/...` 占位），与 shell 提示符的 `~` 惯例不符；用户要求家目录前缀用 `~` 占位。② 横幅原有的 Z 标志是单色极简斜切 Z（Desktop 图标风格的终端化），与 3.8.1-17 重设计的赛博朋克 LOGO（青色 Z 主体 + 品红残影 + glitch 切片）风格脱节，用户要求两者一致。
+  - 改了什么：① `displayWorkspace()`——用 `os.homedir()` 把工作区路径的家目录前缀折叠为 `~`（家目录本身显示 `~`、家外路径保持绝对路径不变；宽窄两种横幅模式都走此函数，截断逻辑不变、只是起点变短）；② 品牌 Z 标志改为双层结构——`BRAND_Z`（青色 accent 的切角 Z）+ `BRAND_GHOST`（品红 brandGhost 的错位残影，向下偏移一行、向右错位），渲染时逐列合并：Z 层非空画青、空处露出的 ghost 画品红，形成 LOGO 同款「色差故障」叠影；③ theme.ts 新增 `brandGhost` 主题色（dark 213 号品红 / light 170 号，对应 LOGO 的 #E879F9 残影）；④ 品牌标志宽度 10 → 12 列（容纳错位残影），`BRAND_MARK` 导出改为双层合并结果；⑤ 测试更新：Z 标志用例改为断言双层残影结构、新增 ghost 颜色（品红 ANSI 码）与 Z 颜色断言、新增 `~` 折叠用例（家内折叠 / 家目录本身 / 家外不折叠），48 列截断断言随 `~` 折叠后路径变短同步调整。`bun run build:tui` 重建 dist，全量 561 测试通过。
+
+
+- **demo.svg 演示录屏文本脱敏：混合用户路径与 ls 用户名改为中性占位**（docs/assets/demo.svg）。
+  - 为什么改：该 SVG 是上游原作者用 asciinema 录屏、svg-term 转换的动画，画面文本里录进了原作者本机的完整路径；本仓库 rebrand 时全局把用户名 `kingsword09` 替换成 `xhqing`，造成 `/Users/xhqing/Documents/code/ai/zcode-cli/...` 这种「一半是本人用户名、一半是原作者目录结构」的混合路径——既指向本机不存在的位置（有误导性），又把本人用户名与本机目录布局（`Documents/code/ai`）泄露在公开仓库的演示图里；`ls -la` 输出的属主列同样暴露用户名。
+  - 改了什么：① 6 处完整路径 `/Users/xhqing/Documents/code/ai/zcode-cli/...` 统一改为中性占位 `~/zcode-cli/...`（等长不影响画面布局，且今后换机器 / 换用户名都不会过期）；② 约 10 处 `ls -la` 属主列 `xhqing staff` 改为 `nobody staff`（6 字符对 6 字符等长替换，列对齐不乱）；③ 欢迎横幅里一处砍头截断的路径 `…sword09/Documents/code/ai/zcode-cli`（用户名被截掉尾巴、当初全局替换没匹配到）同样改为 `~/zcode-cli`；④ 公开署名（package.json `作者: xhqing`）与仓库地址（`github.com/xhqing/zcode-cli`）属演示内容本身、非本机信息，保留不动。复扫确认：无 `/Users/`、`/home/`、`kingsword`、`Documents/code`、私有 IP、密钥类字样残留（画面中 `tokens` 命中均为 token 用量统计文本，非凭证）。
+
+- **与原作者 npm 发布通道彻底切割：包名统一为 `zcode-cli`，GitHub Release 成为唯一分发渠道**（package.json、bun.lock、src/update.ts、src/update-check.ts、packages/zcode-tui/src/update-available-view.ts、scripts/pack-release.ts、scripts/smoke-package.ts、.github/workflows/publish.yml、.github/workflows/prepare-release.yml、test/update.test.ts、test/update-check.test.ts、test/release-package.test.ts、test/release-workflows.test.ts、README.md、README_cn.md、README_zh_tw.md、docs/RELEASING.md）。
+  - 为什么改：本仓库是独立维护的项目分支，与原作者（kingsword09）的 npm 发布通道没有任何关系，只是当初拷贝代码走出自己的分支；但项目内仍残留大量指向原作者 npm 通道的配置与表述——npm 包名 `zcode-app-cli` 归原作者所有（npm 上 latest 3.8.1-15 是原作者构建的，内容与本地不同）、启动更新检查查的是原作者包的 npm registry、README 教用户 `npm install -g zcode-app-cli@latest`（装到的是原作者的包）、publish workflow 里还有整段 npm Trusted Publishing 流程。用户裁定这些全部清理。
+  - 改了什么：① package.json / bun.lock 包名 `zcode-app-cli` → `zcode-cli`，安装路径 `node_modules/zcode-cli`；update.ts 的 `packageName` 常量同步、删除冗余 `displayName`（两者已同名）；smoke-package.ts 安装路径断言同步。② 启动更新检查（update-check.ts）从 npm registry 探测改为查 GitHub Releases latest API（`api.github.com/repos/xhqing/zcode-cli/releases/latest` 的 `tag_name`），TUI 更新提示与实际更新命令（`zcode --update`）从此指向同一发布源——此前 TUI 检查的是原作者 npm 包的版本，与本人 Release 版本号对不上。③ TUI 更新卡片删掉「(npm package: zcode-app-cli)」备注行。④ publish.yml 删除 npm publish / npm view / Trusted Publishing / id-token 权限与内联版本比较器，保留校验、tag 创建与 Release + tarball asset 上传；prepare-release.yml 删除 npm view 已发布 / latest 检查；release-workflows.test.ts 断言同步并新增「workflow 不得含 npm publish / npm view」防回归。⑤ 三版 README 安装命令改为 GitHub Release tarball URL（`https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-<版本>.tgz`，URL 已实测可下载）、更新检查表述改为 GitHub Release、清除全部 npm 通道表述；RELEASING.md 删除 npm 引导与 Trusted Publisher 配置章节，发布口径统一为「tag + GitHub Release + tarball asset」。⑥ 版本号 3.8.1-17 → 3.8.1-18。
+  - 注意：npm 上 `zcode-app-cli` 仍归原作者，本改名不影响其已发布内容；已装旧版的用户 `zcode --update` 会正常拉取新 Release（该命令本就走 GitHub Release）。docs/assets/demo.svg 录屏文本与 `.claude/CLAUDE.md` 项目描述中的旧包名一并清理。
+
 ## 3.8.1-17
 
 ### 新增

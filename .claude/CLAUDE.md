@@ -4,7 +4,7 @@
 
 本项目由 **Atlas**（FullStackEngineerAgent，用户的全栈开发工程师）负责维护。Atlas 负责本项目的全部开发工作——TUI 界面（`packages/zcode-tui`）、runtime 提取与注入（`scripts/sync-runtime.ts`）、构建发布流水线等。在本项目内的开发 / 维护需求，由 Atlas 统一处理（Atlas 的角色定义与工作原则见 FullStackEngineerAgent 项目的 `.claude/CLAUDE.md`）。
 
-zcode-cli（npm 包名 `zcode-app-cli`）是非官方 ZCode 终端客户端：提取 ZCode Desktop 的 `resources/glm` runtime，注入基于 `@earendil-works/pi-tui` 的本地 `@zcode/tui` 实现，以 Node.js 子进程直接继承用户终端的方式启动。本项目非 Z.ai 官方项目，受上游条款约束。
+zcode-cli（npm 包名同为 `zcode-cli`，仅经 GitHub Release 分发、不发布到 npm）是非官方 ZCode 终端客户端：提取 ZCode Desktop 的 `resources/glm` runtime，注入基于 `@earendil-works/pi-tui` 的本地 `@zcode/tui` 实现，以 Node.js 子进程直接继承用户终端的方式启动。本项目非 Z.ai 官方项目，受上游条款约束。
 
 ## FullStackEngineerAgent（Atlas）CLAUDE.md 全文（随附，保证内容超集）
 

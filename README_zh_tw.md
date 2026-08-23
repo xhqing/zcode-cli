@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--17-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--18-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 [English](README.md) | [简体中文](README_cn.md) | 繁體中文
@@ -19,14 +19,14 @@
 的本機 `@zcode/tui` 實作，並以 Node.js 子程序直接繼承使用者終端的方式啟動。
 
 本專案與 Z.ai 無隸屬關係、也未獲其背書。ZCode 及其附帶的 runtime 仍受上游條款約束；
-發布 npm 套件前請先確認你有權再散布擷取出的 runtime。
+發布前請先確認你有權再散布擷取出的 runtime。
 
 ![ZCode CLI TUI demo](./docs/assets/demo.svg)
 
 ## 快速開始
 
 ```bash
-npm install -g zcode-app-cli@latest
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 zcode
 ```
 
@@ -53,15 +53,13 @@ zcode
 ## 安裝與更新
 
 ```bash
-npm install -g zcode-app-cli@latest
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 # 或
-bun add -g zcode-app-cli@latest
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 ```
 
-npm 套件名為 `zcode-app-cli`（npm 上的 `zcode-cli` 名字已被無關套件占用），
-專案展示名為 **ZCode CLI**、指令為 `zcode`。固定使用 `@latest` 是刻意為之：
-與 App 對齊的版本號採用 `3.3.5-2` 這類帶 SemVer 預發布段的格式，`latest`
-標籤始終指向最新驗證過的「App 版本 + 建置號」發布。
+GitHub Release 是唯一的散布管道，本專案不發布到 npm。套件名為
+`zcode-cli`，指令為 `zcode`。
 
 已安裝的使用者升級只需執行：
 
@@ -73,8 +71,8 @@ zcode --update
 `zcode-cli-<版本>.tgz` asset 後全域重灌。GitHub Release 是唯一的更新
 管道——每個 Release 都附帶該 tarball asset。
 
-互動式啟動時，每 20 小時至多檢查一次 npm `latest` 標籤（按已安裝版本計），有新
-版本時以非阻塞的更新卡片提示，附精確的更新指令與 release notes 連結。CI 環境
+互動式啟動時，每 20 小時至多檢查一次 GitHub Release 最新版（按已安裝版本計），
+有新版本時以非阻塞的更新卡片提示，附精確的更新指令與 release notes 連結。CI 環境
 自動略過檢查。設定 `ZCODE_DISABLE_UPDATE_CHECK=1` 或 `NO_UPDATE_NOTIFIER=1`
 可關閉。
 
@@ -83,7 +81,7 @@ zcode --update
 ## 架構
 
 ```text
-Node.js npm 啟動器（設定 / 登入 / 版本詮釋資料）
+Node.js 啟動器（設定 / 登入 / 版本詮釋資料）
   └─ 繼承的 stdin / stdout / stderr
       └─ 官方 zcode.cjs agent runtime
           └─ 本機 @zcode/tui 適配層
@@ -92,7 +90,7 @@ Node.js npm 啟動器（設定 / 登入 / 版本詮釋資料）
 
 官方的 agent、模型、會話、工具、外掛、MCP、憑證儲存與 provider 設定邏輯全部保留
 在擷取出的 runtime 中。本機套件只補齊缺失的終端介面，以及為 Z.AI 註冊的桌面 OAuth
-流程提供一條窄的 macOS 回呼橋。Node.js 啟動公開的 npm 指令，並作為擷取出的上游
+流程提供一條窄的 macOS 回呼橋。Node.js 啟動公開的指令，並作為擷取出的上游
 核心的相容宿主。官方 runtime 直接掌管原始終端模式、輸入法游標定位與縮放處理；
 啟動器不插入第二個 PTY、不中轉終端位元組流。
 
@@ -277,7 +275,7 @@ zcode plugins disable <plugin-id>
 zcode plugins uninstall <plugin-id> --force
 ```
 
-npm 啟動器透過呼叫 runtime 公開的 `app-server` 協定補充市集操作；不 patch、不
+Node.js 啟動器透過呼叫 runtime 公開的 `app-server` 協定補充市集操作；不 patch、不
 重新實作外掛子系統。執行 `zcode plugins --help` 檢視完整指令清單。典型的第三方
 安裝流程：
 

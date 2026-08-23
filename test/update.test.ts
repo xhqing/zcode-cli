@@ -71,10 +71,10 @@ describe("self-update tarball download", () => {
 
   test("keeps the repository constant aligned with the project remote", () => {
     expect(updateRepository).toBe("xhqing/zcode-cli");
-    expect(packageName).toBe("zcode-app-cli");
+    expect(packageName).toBe("zcode-cli");
   });
 
-  test("names release assets after the project, not the npm package", () => {
+  test("names release assets after the project", () => {
     expect(releaseAssetName("3.3.5-2")).toBe("zcode-cli-3.3.5-2.tgz");
   });
 });
@@ -200,7 +200,7 @@ describe("launcher --update dispatch", () => {
       await chmod(fakeGh, 0o755);
       const result = await runLauncher(["--update"], { PATH: `${directory}:${process.env.PATH}` });
       expect(result.stdout).toContain("Checking for zcode-cli updates…");
-      expect(result.stdout).toContain("Current version : 3.8.1-17");
+      expect(result.stdout).toContain("Current version : 3.8.1-18");
       expect(result.stdout).toContain("Latest version  : 99.0.0-1 (xhqing/zcode-cli release)");
     } finally {
       await rm(directory, { recursive: true, force: true });

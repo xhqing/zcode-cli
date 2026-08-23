@@ -17,7 +17,6 @@ export class UpdateAvailableView extends Box {
     this.addChild(new Text([
       `${theme.accent("✨")} ${theme.bold("Update available!")} ${theme.muted(`${current} → ${latest}`)}`,
       `${theme.muted("Run")} ${theme.accent(updateCommand)} ${theme.muted("to update.")}`,
-      `${theme.muted("(npm package: zcode-app-cli)")}`,
       `${theme.muted("Release notes:")} ${theme.accent(releaseNotesUrl)}`
     ].join("\n"), 0, 0));
   }

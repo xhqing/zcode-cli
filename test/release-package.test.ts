@@ -31,9 +31,9 @@ function packFile(path: string): PackFile {
 
 function result(files = requiredPaths.map(packFile)): PackResult {
   return {
-    name: "zcode-app-cli",
+    name: "zcode-cli",
     version: "3.3.5-1",
-    filename: "zcode-app-cli-3.3.5-1.tgz",
+    filename: "zcode-cli-3.3.5-1.tgz",
     size: 10,
     unpackedSize: 20,
     integrity: "sha512-test",
@@ -89,7 +89,7 @@ describe("release package", () => {
   });
 
   test("accepts reviewed paths and rejects omissions or development files", () => {
-    const packageJson = { name: "zcode-app-cli", version: "3.3.5-1" };
+    const packageJson = { name: "zcode-cli", version: "3.3.5-1" };
 
     expect(() => validatePackResult(result(), packageJson)).not.toThrow();
     expect(() => validatePackResult(result(requiredPaths.slice(1).map(packFile)), packageJson)).toThrow(/missing/);
@@ -112,7 +112,7 @@ describe("release package", () => {
       sha512: Buffer.alloc(64, 3).toString("base64")
     };
     const packageJson = {
-      name: "zcode-app-cli",
+      name: "zcode-cli",
       version: "3.3.5-1",
       description: "Unofficial terminal client",
       keywords: ["cli", "node", "terminal", "tui", "zcode"],

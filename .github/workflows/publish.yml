@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish to npm and create the matching GitHub release
+        description: Create the matching Git tag and GitHub release
         required: true
         default: true
         type: boolean
@@ -127,7 +127,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -139,14 +138,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
-
-      - name: Prepare npm Trusted Publishing
-        run: |
-          npm install --global npm@12.0.1 --ignore-scripts
-          node --version
-          npm --version
 
       - name: Download validated release
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -195,9 +187,9 @@ jobs:
             --pack-destination .release/rebuilt > .release/rebuilt.json
           REBUILT_TARBALL=$(find .release/rebuilt -maxdepth 1 -type f -name '*.tgz' -print -quit)
           [[ -n "$REBUILT_TARBALL" ]] || { echo "Rebuilding the release tarball produced no archive." >&2; exit 1; }
-          # npm pack names the archive after the package (zcode-app-cli); the
-          # validated asset carries the project name (zcode-cli). Compare the
-          # contents under the rebuilt name, then publish the renamed asset.
+          # npm pack names the archive after the package; the validated asset
+          # carries the same project name. Compare the contents under the
+          # rebuilt name, then publish the renamed asset.
           mv "$REBUILT_TARBALL" ".release/rebuilt/$(basename "$VALIDATED_TARBALL")"
           REBUILT_TARBALL=".release/rebuilt/$(basename "$VALIDATED_TARBALL")"
           if ! cmp -- "$VALIDATED_TARBALL" "$REBUILT_TARBALL"; then
@@ -215,52 +207,13 @@ jobs:
           PUBLISH_REQUESTED: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          compare_release_versions() {
-            LEFT_VERSION="$1" RIGHT_VERSION="$2" node - <<'NODE'
-          const parse = (value) => {
-            const match = /^(\d+)\.(\d+)\.(\d+)-([1-9]\d*)$/.exec(value.trim());
-            if (!match) throw new Error(`Invalid release version: ${value}`);
-            return match.slice(1).map(Number);
-          };
-          const left = parse(process.env.LEFT_VERSION);
-          const right = parse(process.env.RIGHT_VERSION);
-          const result = left.reduce((answer, value, index) => answer || Math.sign(value - right[index]), 0);
-          process.stdout.write(String(result));
-          NODE
-          }
-
           TAG="v${PACKAGE_VERSION}"
-          PUBLISHED=false
           git fetch --tags --force origin
-          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            PUBLISHED=true
-          else
-            LATEST_VERSION=$(npm view "${PACKAGE_NAME}@latest" version 2>/dev/null || true)
-            if [[ -n "$LATEST_VERSION" ]]; then
-              IS_NEWER=$(compare_release_versions "$PACKAGE_VERSION" "$LATEST_VERSION")
-              if [[ "$IS_NEWER" != "1" ]]; then
-                echo "Refusing to move latest from ${LATEST_VERSION} to ${PACKAGE_VERSION}." >&2
-                exit 1
-              fi
-            fi
-          fi
 
           TAG_COMMIT=$(git rev-list -n 1 "$TAG" 2>/dev/null || true)
           if [[ -n "$TAG_COMMIT" && "$TAG_COMMIT" != "$EXPECTED_COMMIT" ]]; then
             echo "${TAG} already points to ${TAG_COMMIT}, not ${EXPECTED_COMMIT}." >&2
             exit 1
-          fi
-
-          if [[ "$PUBLISHED" == "true" ]]; then
-            PUBLISHED_COMMIT=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" gitHead 2>/dev/null || true)
-            if [[ -z "$PUBLISHED_COMMIT" ]]; then
-              echo "Cannot verify ${PACKAGE_NAME}@${PACKAGE_VERSION}: the existing npm release has no gitHead." >&2
-              exit 1
-            fi
-            if [[ "$PUBLISHED_COMMIT" != "$EXPECTED_COMMIT" ]]; then
-              echo "The existing npm release records ${PUBLISHED_COMMIT}, not ${EXPECTED_COMMIT}." >&2
-              exit 1
-            fi
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -270,14 +223,9 @@ jobs:
           fi
 
           echo "enabled=$PUBLISH_REQUESTED" >> "$GITHUB_OUTPUT"
-          echo "publish=$([[ "$PUBLISHED" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
           echo "create_tag=$([[ -n "$TAG_COMMIT" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
           echo "create_release=$([[ "$RELEASE_EXISTS" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Publish to npm with Trusted Publishing
-        if: steps.release.outputs.enabled == 'true' && steps.release.outputs.publish == 'true'
-        run: npm publish ./.release/publish/package --ignore-scripts --access public --tag latest
 
       - name: Create immutable Git tag
         if: steps.release.outputs.enabled == 'true' && steps.release.outputs.create_tag == 'true'
@@ -324,10 +272,8 @@ jobs:
           ENABLED: ${{ steps.release.outputs.enabled }}
           PACKAGE_NAME: ${{ needs.validate.outputs.package_name }}
           PACKAGE_VERSION: ${{ needs.validate.outputs.package_version }}
-          PUBLISH: ${{ steps.release.outputs.publish }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           echo "Release: ${PACKAGE_NAME}@${PACKAGE_VERSION}" >> "$GITHUB_STEP_SUMMARY"
           echo "Mutations enabled: ${ENABLED:-unknown}" >> "$GITHUB_STEP_SUMMARY"
-          echo "npm publication required: ${PUBLISH:-unknown}" >> "$GITHUB_STEP_SUMMARY"
           echo "Git tag: ${TAG:-unknown}" >> "$GITHUB_STEP_SUMMARY"

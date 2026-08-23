@@ -8,10 +8,8 @@ import { captureCommand } from "./command.ts";
 import { compareReleaseVersions, parseReleaseVersion } from "../scripts/release-version.ts";
 
 export const updateRepository = "xhqing/zcode-cli";
-/** npm package name; the registry distributes the project as zcode-app-cli. */
-export const packageName = "zcode-app-cli";
-/** Display name used in user-facing progress output. */
-export const displayName = "zcode-cli";
+/** npm package name, also the display name used in user-facing progress output. */
+export const packageName = "zcode-cli";
 /**
  * Release asset name for a version. Assets are named after the project
  * (`zcode-cli-<version>.tgz`), not the npm package; pack-release.ts renames
@@ -196,7 +194,7 @@ export async function runSelfUpdate(
 
   const directory = await makeTempDir();
   try {
-    write(streams.out, `Downloading ${displayName} ${release.version} (${releaseAssetName(release.version)})…\n`);
+    write(streams.out, `Downloading ${packageName} ${release.version} (${releaseAssetName(release.version)})…\n`);
     const tarballPath = await downloadReleaseTarball(release, directory, options.downloadRunners);
     write(streams.out, "Installing globally…\n");
     await install(tarballPath);

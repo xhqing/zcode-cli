@@ -131,7 +131,7 @@ describe("startup update check", () => {
     })).resolves.toBeUndefined();
   });
 
-  test("refreshes the npm latest version into an atomic cache", async () => {
+  test("refreshes the latest GitHub Release version into an atomic cache", async () => {
     const cachePath = await temporaryCachePath();
     const now = Date.parse("2026-07-14T12:00:00.000Z");
     let requestedUrl = "";
@@ -143,7 +143,7 @@ describe("startup update check", () => {
         requestedUrl = url;
         expect(new Headers(init.headers).get("user-agent")).toBe("zcode-cli/3.3.5-1");
         expect(init.signal).toBeInstanceOf(AbortSignal);
-        return new Response(JSON.stringify({ version: "3.3.5-2" }), {
+        return new Response(JSON.stringify({ tag_name: "v3.3.5-2" }), {
           headers: { "content-type": "application/json" },
           status: 200
         });
@@ -165,7 +165,7 @@ describe("startup update check", () => {
     })).toMatchObject({ availableVersion: "3.3.5-2", refreshRequired: false });
   });
 
-  test("rejects registry errors without replacing the existing cache", async () => {
+  test("rejects GitHub API errors without replacing the existing cache", async () => {
     const cachePath = await temporaryCachePath();
     const now = Date.parse("2026-07-14T12:00:00.000Z");
     await writeCache(cachePath, "3.3.5-2", now - UPDATE_CACHE_TTL_MS - 1, "3.3.5-1");

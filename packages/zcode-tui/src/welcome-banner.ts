@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+
 import {
   truncateToWidth,
   visibleWidth,
@@ -7,15 +9,27 @@ import {
 import { sanitizeTerminalText } from "./terminal-text.ts";
 import type { ZCodeTheme } from "./theme.ts";
 
-/** A terminal interpretation of the split, diagonal Z in the Desktop app icon. */
-export const BRAND_MARK: readonly string[] = [
-  "█████ ▄███",
-  "    ▄██▀  ",
-  "  ▄██▀    ",
-  "▄███ █████"
+/**
+ * A terminal interpretation of the cyberpunk Z in the project LOGO: the cyan
+ * chamfered Z is drawn on top of a magenta chromatic ghost offset down-right,
+ * so the ghost peeks through the gaps like a glitch echo. All cells are
+ * single-width blocks (U+2580-U+259F) or spaces, so plain indexing is safe.
+ */
+const BRAND_Z: readonly string[] = [
+  "█████ ▄███  ",
+  "    ▄██▀    ",
+  "  ▄██▀      ",
+  "▄███ █████  "
 ];
 
-export const BRAND_MARK_WIDTH = 10;
+const BRAND_GHOST: readonly string[] = [
+  "            ",
+  "  █████ ▄███",
+  "      ▄██▀  ",
+  "    ▄██▀    "
+];
+
+export const BRAND_MARK_WIDTH = 12;
 export const WIDE_BANNER_MIN_WIDTH = 48;
 
 const maxInformationWidth = 72;
@@ -41,6 +55,24 @@ function boxRule(prefix: "┌" | "└", width: number): string {
   const content = prefix === "┌" ? boxTitle : "";
   return `${prefix}${content}${"─".repeat(Math.max(0, width - 1 - visibleWidth(content)))}`;
 }
+
+function brandCell(layer: string, column: number): string {
+  return layer[column] ?? " ";
+}
+
+/** Merge the brand layers for plain-text use, with the cyan Z on top. */
+function mergeBrandLine(z: string, ghost: string): string {
+  let line = "";
+  for (let column = 0; column < BRAND_MARK_WIDTH; column += 1) {
+    const zCell = brandCell(z, column);
+    line += zCell !== " " ? zCell : brandCell(ghost, column);
+  }
+  return line;
+}
+
+export const BRAND_MARK: readonly string[] = BRAND_Z.map((line, index) =>
+  mergeBrandLine(line, BRAND_GHOST[index] ?? "")
+);
 
 export class WelcomeBanner implements Component {
   private readonly branch?: string;
@@ -100,41 +132,70 @@ export class WelcomeBanner implements Component {
       this.theme.muted(boxRule("└", panelWidth))
     ];
 
-    const blank = " ".repeat(BRAND_MARK_WIDTH);
     return information.map((line, index) => (
-      ` ${this.theme.accent(BRAND_MARK[index] ?? blank)}${gap}${line}`
+      ` ${this.brandMarkLine(index)}${gap}${line}`
     ));
   }
 
+  /** Paint the merged brand mark: cyan Z cells with the magenta ghost in the gaps. */
+  private brandMarkLine(index: number): string {
+    const z = BRAND_Z[index] ?? "";
+    const ghost = BRAND_GHOST[index] ?? "";
+    let line = "";
+    for (let column = 0; column < BRAND_MARK_WIDTH; column += 1) {
+      const zCell = brandCell(z, column);
+      const ghostCell = brandCell(ghost, column);
+      if (zCell !== " ") line += this.theme.accent(zCell);
+      else if (ghostCell !== " ") line += this.theme.brandGhost(ghostCell);
+      else line += " ";
+    }
+    return line;
+  }
+
+  /** Collapse the home directory prefix to "~", the way shell prompts do. */
+  private displayWorkspace(): string {
+    const home = homedir();
+    if (!home || home === "/") return this.workspace;
+    const prefix = home.endsWith("/") ? home.slice(0, -1) : home;
+    if (this.workspace === prefix) return "~";
+    for (const separator of ["/", "\\"]) {
+      if (this.workspace.startsWith(`${prefix}${separator}`)) {
+        return `~${this.workspace.slice(prefix.length)}`;
+      }
+    }
+    return this.workspace;
+  }
+
   private locationLine(width: number): string {
-    if (!this.branch) return truncateToWidth(this.workspace, width, "…");
+    const workspace = this.displayWorkspace();
+    if (!this.branch) return truncateToWidth(workspace, width, "…");
     const separator = " · ";
-    // Keep the workspace an intact absolute path whenever it fits: shrink the
+    // Keep the workspace an intact path whenever it fits: shrink the
     // branch label first, and truncate the path from the end (not the start)
-    // only as a last resort so the leading "/" stays visible.
+    // only as a last resort so the leading "~" or "/" stays visible.
     const separatorWidth = visibleWidth(separator);
     const fullBranch = `branch ${this.branch}`;
-    if (visibleWidth(this.workspace) + separatorWidth + visibleWidth(fullBranch) <= width) {
-      return `${this.workspace}${separator}${fullBranch}`;
+    if (visibleWidth(workspace) + separatorWidth + visibleWidth(fullBranch) <= width) {
+      return `${workspace}${separator}${fullBranch}`;
     }
-    const workspaceWidth = visibleWidth(this.workspace);
+    const workspaceWidth = visibleWidth(workspace);
     const branchBudget = Math.max(0, width - workspaceWidth - separatorWidth);
     if (branchBudget >= visibleWidth("branch…")) {
       const branch = truncateToWidth(fullBranch, branchBudget, "…");
-      return `${this.workspace}${separator}${branch}`;
+      return `${workspace}${separator}${branch}`;
     }
     const branchWidth = Math.max(8, Math.floor(width * 0.25));
     const branch = truncateToWidth(fullBranch, branchWidth, "…");
     const pathBudget = width - separatorWidth - visibleWidth(branch);
     if (pathBudget < 4) return truncateToWidth(fullBranch, width, "…");
-    return `${truncateToWidth(this.workspace, pathBudget, "…")}${separator}${branch}`;
+    return `${truncateToWidth(workspace, pathBudget, "…")}${separator}${branch}`;
   }
 
   private renderCompact(width: number): string[] {
     const contentWidth = Math.max(0, width - 1);
     const primaryVersion = this.distributionVersion ?? this.runtimeVersion;
     const identity = `${this.theme.bold(this.theme.accent("ZCODE"))}  ${this.theme.muted(`v${primaryVersion}`)}`;
-    const location = [this.workspace, this.branch ? `branch ${this.branch}` : undefined]
+    const location = [this.displayWorkspace(), this.branch ? `branch ${this.branch}` : undefined]
       .filter((value): value is string => Boolean(value))
       .join(" · ");
     return [

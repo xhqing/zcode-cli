@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+
 import { describe, expect, test } from "bun:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 
@@ -20,12 +22,42 @@ function banner(width: number, color = false): string[] {
 }
 
 describe("welcome banner", () => {
-  test("uses a four-line split Z mark inspired by the Desktop icon", () => {
+  test("uses a four-line cyberpunk Z mark with a glitch ghost layer", () => {
     expect(BRAND_MARK).toHaveLength(4);
     for (const line of BRAND_MARK) {
       expect(visibleWidth(line)).toBe(BRAND_MARK_WIDTH);
       expect(line).toMatch(/^[\u0020\u2580-\u259f]+$/u);
     }
+    // The ghost must be offset from the Z so the merged mark shows an echo.
+    expect(BRAND_MARK.some((line) => line !== BRAND_MARK[0])).toBe(true);
+  });
+
+  test("paints the Z in accent and the ghost in the brand ghost color", () => {
+    const view = new WelcomeBanner(createTheme(true), {
+      runtimeVersion: "0.15.2",
+      workspace: "/tmp/project"
+    });
+    const output = view.render(80).join("\n");
+    expect(output).toContain("\x1b[38;5;75m"); // cyan Z cells
+    expect(output).toContain("\x1b[38;5;213m"); // magenta ghost cells
+  });
+
+  test("collapses the home directory prefix to ~", () => {
+    const render = (workspace: string): string => {
+      const view = new WelcomeBanner(createTheme(false), {
+        branch: "main",
+        runtimeVersion: "0.15.2",
+        workspace
+      });
+      return view.render(80).join("\n");
+    };
+    const home = homedir();
+    expect(render(`${home}/Documents/Projects/zcode-cli`)).toContain(
+      "~/Documents/Projects/zcode-cli · branch main"
+    );
+    expect(render(home)).toContain("~ · branch main");
+    // Paths outside home keep their absolute form.
+    expect(render("/home/alice/work/zcode-cli")).not.toContain("~");
   });
 
   test("integrates identity, versions and workspace into the wide header", () => {
@@ -44,14 +76,14 @@ describe("welcome banner", () => {
     }
   });
 
-  test("keeps the workspace an absolute path by truncating from the end", () => {
+  test("keeps the workspace path intact by truncating from the end", () => {
     const plain = (value: string) => value.replace(/\x1b\[[0-9;]*m/gu, "");
     // At 80 columns the full path plus branch fits without any truncation.
     const wide = plain(banner(80).join("\n"));
     expect(wide).toContain("/home/alice/work/zcode-cli · branch main");
     // At 48 columns nothing fits whole; the leading "/" must survive.
     const narrow = plain(banner(48).join("\n"));
-    expect(narrow).toMatch(/│ \/home\/alice\/work\/zco…/u);
+    expect(narrow).toMatch(/│ \/home\/alice\/work\/z…/u);
     expect(narrow).not.toMatch(/…code-cli/u);
   });
 

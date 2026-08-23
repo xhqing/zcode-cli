@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--17-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--18-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 English | [简体中文](README_cn.md) | [繁體中文](README_zh_tw.md)
@@ -22,14 +22,14 @@ terminal.
 
 This project is not affiliated with or endorsed by Z.ai. ZCode and its bundled
 runtime remain subject to their upstream terms. Confirm that you are allowed to
-redistribute the extracted runtime before publishing the npm package.
+redistribute the extracted runtime before publishing a release.
 
 ![ZCode CLI TUI demo](./docs/assets/demo.svg)
 
 ## Quick start
 
 ```bash
-npm install -g zcode-app-cli@latest
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 zcode
 ```
 
@@ -58,17 +58,14 @@ Reopen it anytime with `/setup`; press Esc to skip.
 ## Install and update
 
 ```bash
-npm install -g zcode-app-cli@latest
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 # or
-bun add -g zcode-app-cli@latest
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
 ```
 
-The npm package is named `zcode-app-cli` (the `zcode-cli` name on npm is
-owned by an unrelated package); the project is called **ZCode CLI** and the
-command is `zcode`. Using `@latest` is intentional because the
-App-aligned release format uses a SemVer prerelease segment such as
-`3.3.5-2`. The tag always points to the newest validated App-plus-build
-release.
+GitHub Releases are the only distribution channel; the project does not
+publish to npm. The package installs as `zcode-cli` and the command is
+`zcode`.
 
 To upgrade an existing installation, run:
 
@@ -81,11 +78,11 @@ CLI), downloads the release tarball asset, and reinstalls it globally.
 GitHub Releases are the only update channel — every release carries the
 `zcode-cli-<version>.tgz` asset that this command installs.
 
-Interactive startup checks the npm `latest` tag at most once every 20 hours
-per installed version and shows a cached newer version as a non-blocking
-update card with the exact update command and release-notes link. CI
-environments skip the check automatically. Set `ZCODE_DISABLE_UPDATE_CHECK=1`
-or `NO_UPDATE_NOTIFIER=1` to disable it.
+Interactive startup checks the latest GitHub Release at most once every 20
+hours per installed version and shows a cached newer version as a
+non-blocking update card with the exact update command and release-notes
+link. CI environments skip the check automatically. Set
+`ZCODE_DISABLE_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1` to disable it.
 
 A normal installation requires only Node.js and has no native PTY addon or
 postinstall build step.
@@ -93,7 +90,7 @@ postinstall build step.
 ## Architecture
 
 ```text
-Node.js npm launcher (config / login / version metadata)
+Node.js launcher (config / login / version metadata)
   └─ inherited stdin / stdout / stderr
       └─ official zcode.cjs agent runtime
           └─ local @zcode/tui adapter
@@ -103,7 +100,7 @@ Node.js npm launcher (config / login / version metadata)
 The official agent, model, session, tool, plugin, MCP, credential store and
 provider-configuration logic remains in the extracted runtime. The local
 package supplies the missing terminal interface and a narrow macOS callback
-bridge for Z.AI's registered Desktop OAuth flow. Node.js starts the public npm
+bridge for Z.AI's registered Desktop OAuth flow. Node.js starts the public
 command and remains the compatibility host for the extracted upstream kernel.
 The official runtime directly owns raw terminal mode, IME cursor placement and
 resize handling; the launcher does not insert a second PTY or relay terminal
@@ -335,7 +332,7 @@ zcode plugins disable <plugin-id>
 zcode plugins uninstall <plugin-id> --force
 ```
 
-The npm launcher adds marketplace operations by calling the runtime's public
+The Node.js launcher adds marketplace operations by calling the runtime's public
 `app-server` protocol; it does not patch or reimplement the Plugin subsystem.
 Run `zcode plugins --help` for the full command list. A typical third-party
 installation is:

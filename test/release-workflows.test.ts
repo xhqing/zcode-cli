@@ -52,25 +52,6 @@ function findAction(steps: WorkflowStep[], repository: string, sha: string): Wor
   return steps.find((step) => step.uses === `${repository}@${sha}`);
 }
 
-async function runInlineVersionComparator(source: string, left: string, right: string): Promise<string> {
-  const script = /compare_release_versions\(\) \{[\s\S]*?<<'NODE'\n([\s\S]*?)\n\s*NODE\n\s*\}/u
-    .exec(source)?.[1];
-  if (!script) throw new Error("Could not extract the privileged release version comparator.");
-
-  const child = Bun.spawn([process.execPath, "-e", script], {
-    env: { ...process.env, LEFT_VERSION: left, RIGHT_VERSION: right },
-    stdout: "pipe",
-    stderr: "pipe"
-  });
-  const [code, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text()
-  ]);
-  if (code !== 0) throw new Error(stderr.trim() || `Comparator exited with status ${code}.`);
-  return stdout.trim();
-}
-
 describe("release workflows", () => {
   test("runs read-only CI with pinned actions and cancels superseded checks", async () => {
     const { source, workflow } = await readWorkflow("ci.yml");
@@ -169,18 +150,14 @@ describe("release workflows", () => {
     const transferCheck = publishJob.steps.find((step) => step.name === "Verify validated tarball");
     const rebuild = publishJob.steps.find((step) => step.name === "Rebuild tarball without project scripts");
     const stateCheck = publishJob.steps.find((step) => step.name === "Inspect release state");
-    const publishIndex = publishJob.steps.findIndex(
-      (step) => step.name === "Publish to npm with Trusted Publishing"
-    );
     const tagIndex = publishJob.steps.findIndex((step) => step.name === "Create immutable Git tag");
     const releaseIndex = publishJob.steps.findIndex((step) => step.name === "Create GitHub Release");
-    const publish = publishJob.steps[publishIndex];
 
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(workflow.on).toHaveProperty("pull_request");
     expect(workflow.permissions).toEqual({});
     expect(validate.permissions).toEqual({ contents: "read" });
-    expect(publishJob.permissions).toEqual({ contents: "write", "id-token": "write" });
+    expect(publishJob.permissions).toEqual({ contents: "write" });
     expect(publishJob.needs).toBe("validate");
     expect(validate.if).toContain("github.ref_name == github.event.repository.default_branch");
     expect(validate.if).toContain("github.event.pull_request.merged == true");
@@ -207,17 +184,8 @@ describe("release workflows", () => {
     expect(rebuild?.run).toContain("npm pack ./.release/publish/package");
     expect(rebuild?.run).toContain("--ignore-scripts");
     expect(rebuild?.run).toContain("cmp --");
-    expect(stateCheck?.run).toContain("gitHead");
     expect(stateCheck?.run).toContain("TAG_COMMIT");
-    await expect(runInlineVersionComparator(stateCheck!.run!, "3.3.7-1", "3.3.6-99")).resolves.toBe("1");
-    await expect(runInlineVersionComparator(stateCheck!.run!, "3.3.6-5", "3.3.6-5")).resolves.toBe("0");
-    await expect(runInlineVersionComparator(stateCheck!.run!, "3.3.6-4", "3.3.6-5")).resolves.toBe("-1");
-    expect(publish?.run).toBe(
-      "npm publish ./.release/publish/package --ignore-scripts --access public --tag latest"
-    );
-    expect(publish?.env).toBeUndefined();
-    expect(publishIndex).toBeGreaterThan(-1);
-    expect(tagIndex).toBeGreaterThan(publishIndex);
+    expect(tagIndex).toBeGreaterThan(-1);
     expect(releaseIndex).toBeGreaterThan(tagIndex);
 
     // Every GitHub Release must carry the tarball asset that `zcode --update`
@@ -231,8 +199,11 @@ describe("release workflows", () => {
     expect(attachStep?.if).toBe("steps.release.outputs.enabled == 'true' && steps.release.outputs.create_release == 'false'");
     expect(attachStep?.run).toBe("gh release upload \"$TAG\" \".release/zcode-cli-${PACKAGE_VERSION}.tgz\" --clobber");
 
+    // GitHub Releases are the only distribution channel; nothing reaches npm.
     expect(source).not.toContain("NPM_TOKEN");
     expect(source).not.toContain("npm@latest");
+    expect(source).not.toContain("npm publish");
+    expect(source).not.toContain("npm view");
     expect(source).toContain("npm@12.0.1");
     expect(source).toContain("gh api --method POST");
   });

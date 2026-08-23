@@ -113,23 +113,6 @@ jobs:
             exit 1
           fi
 
-          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; increment the CLI build before creating another release." >&2
-            exit 1
-          fi
-
-          LATEST_VERSION=$(npm view "${PACKAGE_NAME}@latest" version 2>/dev/null || true)
-          if [[ -n "$LATEST_VERSION" ]]; then
-            IS_NEWER=$(PACKAGE_VERSION="$PACKAGE_VERSION" LATEST_VERSION="$LATEST_VERSION" bun -e '
-              import { compareReleaseVersions } from "./scripts/release-version.ts";
-              console.log(compareReleaseVersions(process.env.PACKAGE_VERSION, process.env.LATEST_VERSION) > 0);
-            ')
-            if [[ "$IS_NEWER" != "true" ]]; then
-              echo "Refusing to prepare ${PACKAGE_VERSION} because npm latest is ${LATEST_VERSION}." >&2
-              exit 1
-            fi
-          fi
-
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release pull request
@@ -156,8 +139,8 @@ jobs:
 
             The generated `vendor/` runtime remains outside Git; its verified
             source is committed in `zcode-runtime.lock.json`. Merging this PR
-            triggers a fresh extraction, npm Trusted Publishing, an immutable
-            Git tag, and a GitHub Release from the merge commit.
+            triggers a fresh extraction, an immutable Git tag, and a GitHub
+            Release with the tarball asset from the merge commit.
 
       - name: Summarize release pull request
         if: steps.release.outputs.changed == 'true'

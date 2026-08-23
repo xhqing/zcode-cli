@@ -7,7 +7,7 @@ import { compareReleaseVersions, parseReleaseVersion } from "../scripts/release-
 import { userConfigPath } from "./model-access.ts";
 
 export const UPDATE_CACHE_TTL_MS = 20 * 60 * 60 * 1_000;
-export const UPDATE_CHECK_URL = "https://registry.npmjs.org/zcode-app-cli/latest";
+export const UPDATE_CHECK_URL = "https://api.github.com/repos/xhqing/zcode-cli/releases/latest";
 
 interface UpdateCache {
   checkedVersion?: string;
@@ -145,18 +145,19 @@ export async function refreshUpdateCache(options: RefreshUpdateCacheOptions): Pr
     const fetcher = options.fetcher ?? ((url, init) => fetch(url, init));
     const response = await fetcher(UPDATE_CHECK_URL, {
       headers: {
-        accept: "application/json",
+        accept: "application/vnd.github+json",
         "user-agent": `zcode-cli/${options.currentVersion}`
       },
       signal: controller.signal
     });
-    if (!response.ok) throw new Error(`npm registry returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`GitHub Releases API returned HTTP ${response.status}.`);
     const body: unknown = await response.json();
-    const latestVersion = typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Record<string, unknown>).version
+    const tagName = typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>).tag_name
       : undefined;
+    const latestVersion = typeof tagName === "string" ? tagName.replace(/^v/u, "") : undefined;
     if (typeof latestVersion !== "string" || !parseReleaseVersion(latestVersion)) {
-      throw new Error("npm registry returned an invalid release version.");
+      throw new Error("GitHub Releases API returned an invalid release version.");
     }
     await writeUpdateCache(options.cachePath, {
       checkedVersion: options.currentVersion,

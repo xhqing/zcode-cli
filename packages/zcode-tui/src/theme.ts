@@ -19,6 +19,7 @@ function ansi(code: () => string, enabled: boolean): (text: string) => string {
 
 interface ThemePalette {
   accent: string;
+  brandGhost: string;
   success: string;
   warning: string;
   error: string;
@@ -38,6 +39,7 @@ interface ThemePalette {
 const palettes: Record<ZCodeColorScheme, ThemePalette> = {
   dark: {
     accent: "38;5;75",
+    brandGhost: "38;5;213",
     success: "38;5;78",
     warning: "38;5;221",
     error: "38;5;203",
@@ -55,6 +57,7 @@ const palettes: Record<ZCodeColorScheme, ThemePalette> = {
   },
   light: {
     accent: "38;5;25",
+    brandGhost: "38;5;170",
     success: "38;5;22",
     warning: "38;5;94",
     error: "38;5;160",
@@ -84,6 +87,7 @@ function paletteStyle(
 
 export interface ZCodeTheme {
   accent: (text: string) => string;
+  brandGhost: (text: string) => string;
   success: (text: string) => string;
   warning: (text: string) => string;
   error: (text: string) => string;
@@ -108,6 +112,7 @@ export function createTheme(enabled: boolean, initialColorScheme: ZCodeColorSche
   const state = { colorScheme: initialColorScheme };
   const codeHighlighter = new CodeHighlighter(enabled, initialColorScheme);
   const accent = paletteStyle(state, "accent", enabled);
+  const brandGhost = paletteStyle(state, "brandGhost", enabled);
   const success = paletteStyle(state, "success", enabled);
   const warning = paletteStyle(state, "warning", enabled);
   const error = paletteStyle(state, "error", enabled);
@@ -147,6 +152,7 @@ export function createTheme(enabled: boolean, initialColorScheme: ZCodeColorSche
 
   return {
     accent,
+    brandGhost,
     success,
     warning,
     error,
