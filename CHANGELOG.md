@@ -2,7 +2,7 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
-## Unreleased
+## 3.8.1-19
 
 ### 变更
 
@@ -26,6 +26,7 @@
 - **撤销促销倍率 `ZCODE_STATS_CREDIT_MULTIPLIER`：积分一律以 monitor 服务端真实数据为准**（src/usage.ts、src/env-config.ts、test/usage.test.ts、test/env-config.test.ts、.env.example、README.md、README_cn.md、README_zh_tw.md、docs/CONFIGURATION.md）。
   - 为什么改：用户裁定「不要自己算，我要的是官方后端的真实数据」——monitor 真实积分报告已包含全部促销与折扣，本地手工配倍率既多余又不准（0.67 只是近似换算）。
   - 改了什么：① `.env` 变量表删除 `ZCODE_STATS_CREDIT_MULTIPLIER`，env 同步不再写 config.json 的 `usage.creditMultiplier`（`parseCreditMultiplier()` 删除）；② `computeCredits()` 删除倍率参数、回归纯官方系数；`StatsTotals` 删 `creditMultiplier` 字段；报告标题与积分行不再显示促销倍率标注；③ 测试同步（删倍率用例）；④ 文档同步（.env.example 删「Usage stats」节、三版 README 与 CONFIGURATION.md 删倍率说明，真实积分表述提前）。
+- **版本号 3.8.1-18 → 3.8.1-19**（VERSION、package.json、test/update.test.ts、CHANGELOG.md）：3.8.1-18 已发 GitHub Release（v3.8.1-18，2026-08-23）且其后有新提交（本次 `zcode stats` 用量统计提交 b590594），commit skill 版本滞后检测触发 patch 级 bump（沿用项目 `3.8.1-N` 后缀递增惯例）；版本号运行时从 package.json 读取、无构建产物需重建，update 测试断言同步改。
 
 ## 3.8.1-18
 
