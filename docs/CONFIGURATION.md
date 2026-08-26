@@ -130,6 +130,47 @@ file returns control to `config.json`.
 
 The file holds a live API key: keep it out of every repository and at mode 600.
 
+#### Multiple keys with automatic failover
+
+Keys are configured one variable per key: the primary stays in
+`ZCODE_API_KEY`, backups add numbered variables (tried in ascending order,
+duplicates dropped):
+
+```bash
+ZCODE_API_KEY=key-aaaa
+ZCODE_API_KEY_2=key-bbbb
+ZCODE_API_KEY_3=key-cccc
+ZCODE_MAIN_MODEL=glm-5.2
+```
+
+With more than one key zcode starts a loopback proxy (bound to `127.0.0.1`,
+first free port from 7849) before the runtime boots and syncs the provider in
+`config.json` to point at it with the placeholder key `zcode-failover`. The
+runtime keeps talking to what it believes is the real endpoint; the proxy holds
+the real keys in memory and forwards every request with the currently selected
+key. When the upstream rejects that key — HTTP 401/403/429, any 5xx status, or
+a connection failure — the same request is retried with the next key before
+anything is sent back. Successful responses are streamed untouched, so SSE
+model streams behave exactly as with a single key. The next request starts
+from the key that last succeeded.
+
+Failover events are appended to `~/.zcode/cli/key-failover.log` (keys masked
+to their first and last four characters, rotated at 1 MiB). If every key fails,
+the last upstream answer is passed through so the runtime's own retry logic
+and error reporting keep working.
+
+Notes:
+
+- The real keys never enter `config.json` or any other file — only the `.env`
+  file and proxy memory hold them.
+- The endpoint stays the one declared by `ZCODE_BASE_URL` / the provider
+  default; failover only rotates keys, all keys must belong to the same
+  endpoint/account family.
+- A single key keeps the direct connection with no proxy involved. Removing
+  the extra variables (or the `.env` file) restores the previous behavior on
+  the next start.
+- Each variable holds exactly one key; comma-separated lists are not read.
+
 ### Coding Plan API key
 
 Start the TUI and open its setup picker:

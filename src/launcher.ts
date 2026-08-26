@@ -20,7 +20,8 @@ import {
   readConfiguredModelAccess,
   readSetupPending
 } from "./model-access.ts";
-import { syncEnvFileToConfig } from "./env-config.ts";
+import { readEnvFile, resolveUpstreamBaseURL, syncEnvFileToConfig } from "./env-config.ts";
+import { collectApiKeys, startKeyFailoverProxy, type KeyFailoverProxy } from "./key-failover.ts";
 import {
   classifyZaiOAuthInvocation,
   runZaiOAuthLogin,
@@ -449,8 +450,21 @@ export async function main(args: string[]): Promise<number> {
 
   // Sync ~/.zcode/cli/.env into config.json before anything reads model
   // settings: the login check below and the runtime both see the result.
+  // More than one key variable (ZCODE_API_KEY plus ZCODE_API_KEY_2, ...)
+  // activates the loopback failover proxy first — its port must be known
+  // before the provider block (rewritten to point at the proxy) lands in
+  // config.json.
+  let failoverProxy: KeyFailoverProxy | undefined;
   try {
-    const envSync = await syncEnvFileToConfig();
+    const envFile = await readEnvFile();
+    const apiKeys = collectApiKeys(envFile?.values ?? {});
+    const upstreamBaseURL = envFile ? resolveUpstreamBaseURL(envFile.values) : undefined;
+    if (envFile && apiKeys.length > 1 && upstreamBaseURL) {
+      failoverProxy = await startKeyFailoverProxy({ upstreamBaseURL, keys: apiKeys });
+    }
+    const envSync = await syncEnvFileToConfig(undefined, {
+      ...(failoverProxy ? { failoverProxyBaseURL: failoverProxy.baseURL } : {})
+    });
     if (envSync.error) {
       console.error(
         `Error: invalid ${envSync.envPath}: ${envSync.error}.\n`
@@ -541,5 +555,7 @@ export async function main(args: string[]): Promise<number> {
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
+  } finally {
+    if (failoverProxy) await failoverProxy.close().catch(() => {});
   }
 }

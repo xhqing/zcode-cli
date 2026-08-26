@@ -451,7 +451,12 @@ setup steps, retries/timeouts, theme, and turn-completion notifications, see
 As a flat-file alternative, copy the commented `.env.example` template to
 `~/.zcode/cli/.env` and fill in your API key and model IDs: on every start
 zcode syncs that file into config.json before the runtime boots, no login or
-JSON editing required.
+JSON editing required. Backup keys go into numbered variables
+(`ZCODE_API_KEY_2`, `ZCODE_API_KEY_3`, ... — one key per variable): with more
+than one key zcode runs a loopback failover proxy that
+transparently retries each request with the next key when one is rejected
+(401/403/429, 5xx, connection failures) — see
+[Configuration](./docs/CONFIGURATION.md) for details.
 
 ## Local development
 

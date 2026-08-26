@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
 
 import { updateUserConfig, userConfigPath, type UserConfigRecord } from "./model-access.ts";
+import { collectApiKeys, numberedApiKeyPattern, placeholderApiKey } from "./key-failover.ts";
 
 /**
  * Environment-file configuration.
@@ -30,9 +31,17 @@ export const envFileVariables = [
 
 export type EnvFileVariable = (typeof envFileVariables)[number];
 
+/**
+ * Env-file values including the numbered backup key variables
+ * (`ZCODE_API_KEY_2`, ...) that `envFileVariables` does not enumerate.
+ */
+export type EnvFileValues = Partial<Record<EnvFileVariable, string>> & {
+  [variable: string]: string | undefined;
+};
+
 export interface EnvFileContent {
   path: string;
-  values: Partial<Record<EnvFileVariable, string>>;
+  values: EnvFileValues;
 }
 
 export interface EnvFileSyncResult {
@@ -41,6 +50,8 @@ export interface EnvFileSyncResult {
   envPath: string;
   /** Present when the file declares model settings that failed validation. */
   error?: string;
+  /** Present when the file declared several API keys and failover activated. */
+  failover?: FailoverBuild;
 }
 
 export function envFilePath(
@@ -58,24 +69,26 @@ export function envFilePath(
 /**
  * Parses dotenv-style text: `KEY=value` lines, `#` comments, blank lines.
  * Surrounding quotes are stripped, everything else stays verbatim. Lines that
- * do not match the known variable set are ignored so the file can carry
+ * do not match the known variable set (base variables plus the numbered
+ * `ZCODE_API_KEY_<n>` backup keys) are ignored so the file can carry
  * unrelated entries without breaking startup.
  */
-export function parseEnvFileContent(text: string): Partial<Record<EnvFileVariable, string>> {
-  const values: Partial<Record<EnvFileVariable, string>> = {};
+export function parseEnvFileContent(text: string): EnvFileValues {
+  const values: EnvFileValues = {};
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const separator = line.indexOf("=");
     if (separator <= 0) continue;
     const key = line.slice(0, separator).trim();
-    if (!(envFileVariables as readonly string[]).includes(key)) continue;
+    const knownKey = (envFileVariables as readonly string[]).includes(key) || numberedApiKeyPattern.test(key);
+    if (!knownKey) continue;
     let value = line.slice(separator + 1).trim();
     if (value.length >= 2
       && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
       value = value.slice(1, -1);
     }
-    if (value) values[key as EnvFileVariable] = value;
+    if (value) values[key] = value;
   }
   return values;
 }
@@ -116,11 +129,35 @@ function displayName(value: string): string {
     .join(" ");
 }
 
+const providerBaseUrlDefaults: Record<string, string> = {
+  zai: "https://api.z.ai/api/anthropic",
+  bigmodel: "https://open.bigmodel.cn/api/anthropic"
+};
+
+/**
+ * Real upstream API root for the declared provider (before any failover
+ * rewrite). `undefined` mirrors the `ZCODE_BASE_URL is not set` build error.
+ */
+export function resolveUpstreamBaseURL(
+  values: Partial<Record<EnvFileVariable, string>>
+): string | undefined {
+  const providerId = (values.ZCODE_PROVIDER_ID?.trim() || "zai").toLowerCase();
+  return values.ZCODE_BASE_URL?.trim() || providerBaseUrlDefaults[providerId];
+}
+
+/** Failover activation reported by `buildProviderConfig` / env sync. */
+export interface FailoverBuild {
+  /** Loopback proxy baseURL that replaced the provider's real endpoint. */
+  proxyBaseURL: string;
+  keyCount: number;
+}
+
 export interface ProviderBuild {
   providerId: string;
   /** The provider entry to store under `config.provider[providerId]`. */
   provider: UserConfigRecord;
   model: { main: string; lite: string };
+  failover?: FailoverBuild;
 }
 
 /**
@@ -128,11 +165,20 @@ export interface ProviderBuild {
  * `providerId` defaults to `zai` because the upstream login gate only accepts
  * API keys stored under provider ID `zai` or `bigmodel`; any other ID is valid
  * model configuration but leaves the login wizard active.
+ *
+ * Keys are one per variable: `ZCODE_API_KEY` holds the primary key and
+ * numbered `ZCODE_API_KEY_2`, `ZCODE_API_KEY_3`, ... hold backups. With a
+ * `failover` proxy baseURL supplied (the launcher always supplies one) a
+ * multi-key file writes the proxy address plus a placeholder key into
+ * config.json — the real keys live only in the in-memory proxy. Without a
+ * proxy a multi-key setup degrades to its first key.
  */
 export function buildProviderConfig(
-  values: Partial<Record<EnvFileVariable, string>>
+  values: EnvFileValues,
+  failover?: { proxyBaseURL: string }
 ): ProviderBuild | { error: string } {
-  const apiKey = values.ZCODE_API_KEY?.trim();
+  const apiKeys = collectApiKeys(values);
+  const apiKey = apiKeys[0];
   if (!apiKey) return { error: "ZCODE_API_KEY is not set" };
   const providerId = (values.ZCODE_PROVIDER_ID?.trim() || "zai").toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(providerId)) {
@@ -148,12 +194,9 @@ export function buildProviderConfig(
   if (!mainModel) return { error: "ZCODE_MAIN_MODEL is not set" };
   const liteModel = values.ZCODE_LITE_MODEL?.trim() || mainModel;
 
-  const defaultBaseUrls: Record<string, string> = {
-    zai: "https://api.z.ai/api/anthropic",
-    bigmodel: "https://open.bigmodel.cn/api/anthropic"
-  };
-  const baseURL = values.ZCODE_BASE_URL?.trim() || defaultBaseUrls[providerId];
+  const baseURL = resolveUpstreamBaseURL(values);
   if (!baseURL) return { error: "ZCODE_BASE_URL is not set" };
+  const failoverActive = apiKeys.length > 1 && failover !== undefined;
 
   // Declaring the selected models keeps the generated config internally
   // consistent even when they are absent from ZCODE_EXTRA_MODELS.
@@ -166,11 +209,27 @@ export function buildProviderConfig(
     provider: {
       kind,
       name: values.ZCODE_PROVIDER_NAME?.trim() || displayName(providerId),
-      options: { apiKey, apiKeyRequired: true, baseURL },
+      options: {
+        apiKey: failoverActive ? placeholderApiKey : apiKey,
+        apiKeyRequired: true,
+        baseURL: failoverActive ? failover!.proxyBaseURL : baseURL
+      },
       models: Object.fromEntries(models)
     },
-    model: { main: `${providerId}/${mainModel}`, lite: `${providerId}/${liteModel}` }
+    model: { main: `${providerId}/${mainModel}`, lite: `${providerId}/${liteModel}` },
+    ...(failoverActive ? {
+      failover: { proxyBaseURL: failover!.proxyBaseURL, keyCount: apiKeys.length }
+    } : {})
   };
+}
+
+export interface EnvFileSyncOptions {
+  /**
+   * Loopback failover-proxy baseURL. When the env file declares several API
+   * keys, the provider entry is rewritten to point here with a placeholder
+   * key; the proxy itself holds the real keys in memory.
+   */
+  failoverProxyBaseURL?: string;
 }
 
 /**
@@ -181,15 +240,21 @@ export function buildProviderConfig(
  * `error` when declared settings fail validation — the caller should stop with
  * that message instead of silently falling back to a stale config.
  */
-export async function syncEnvFileToConfig(env: NodeJS.ProcessEnv = process.env): Promise<EnvFileSyncResult> {
+export async function syncEnvFileToConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  options: EnvFileSyncOptions = {}
+): Promise<EnvFileSyncResult> {
   const configPath = userConfigPath(env);
   const file = await readEnvFile(env);
   if (!file) return { applied: false, configPath, envPath: envFilePath(env) };
-  if (!file.values.ZCODE_API_KEY && !file.values.ZCODE_MAIN_MODEL) {
+  if (collectApiKeys(file.values).length === 0 && !file.values.ZCODE_MAIN_MODEL) {
     return { applied: false, configPath, envPath: file.path };
   }
 
-  const built = buildProviderConfig(file.values);
+  const built = buildProviderConfig(
+    file.values,
+    options.failoverProxyBaseURL ? { proxyBaseURL: options.failoverProxyBaseURL } : undefined
+  );
   if ("error" in built) {
     return { applied: false, configPath, envPath: file.path, error: built.error };
   }
@@ -199,5 +264,10 @@ export async function syncEnvFileToConfig(env: NodeJS.ProcessEnv = process.env):
     config.provider = { ...provider, [built.providerId]: built.provider };
     config.model = { ...built.model };
   }, env);
-  return { applied: true, configPath, envPath: file.path };
+  return {
+    applied: true,
+    configPath,
+    envPath: file.path,
+    ...(built.failover ? { failover: built.failover } : {})
+  };
 }

@@ -6,6 +6,13 @@
 
 ### 变更
 
+- **`ZCODE_API_KEY` 支持多 key 容灾：本地回环代理按 key 轮换重试**（src/key-failover.ts 新建、src/env-config.ts、src/launcher.ts、.env.example、test/key-failover.test.ts 新建、test/env-config.test.ts、docs/CONFIGURATION.md、README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：用户要求多把 bigmodel coding plan key 做容灾——端点不变、同一端点下配多把 key，某把 key 的请求失败时直接切换另一把继续；此前每个 provider 只支持单 key，key 失效 / 限流只能手动换。多 key 的配置格式同日由「`ZCODE_API_KEY` 逗号分隔多把 key」改为「每把 key 一个变量」（用户裁定：不要一个变量里逗号分隔）。
+  - 改了什么：① 多把 key 每把一个变量：主 key 仍是 `ZCODE_API_KEY`，备用 key 用编号变量 `ZCODE_API_KEY_2`、`ZCODE_API_KEY_3`……（按编号升序去重合并；解析宽容收集任意 `ZCODE_API_KEY_<正整数>`）；`.env.example` 模板以注释变量行 `#ZCODE_API_KEY_2=`、`#ZCODE_API_KEY_3=` 直接列出备用 key 变量，取消注释填值即可启用。多于一把时 launcher 在拉起 runtime 前启动只绑 127.0.0.1 的本地容灾代理（端口从 7849 起找空闲，避免多实例冲突），并把 `.env` 同步写入 config.json 的 provider 条目改写为：baseURL 指向代理（保留上游端点路径）、apiKey 写占位符 `zcode-failover`——真实 key 只存在于 `.env` 文件与代理内存，不落 config.json。② 代理逐请求注入当前 key（替换 x-api-key / authorization 的值，其余 header 原样透传）：上游返回 401/403/429/5xx 或连接失败时，换下一把 key 用同一请求体重试，成功（含 2xx 与不可切换的 4xx）后流式透传响应（SSE 不受影响）并记住健康 key 作为下次起点；全部 key 失败则回传最后一次上游响应，runtime 自带的重试与报错逻辑不受影响。③ 切换事件追加记录到 `~/.zcode/cli/key-failover.log`（key 脱敏为前 4 + 后 4 位，超 1 MiB 轮转），不打终端以免扰乱 TUI。④ 单 key 时行为与原来完全一致（直连、无代理）。⑤ 测试：新建 test/key-failover.test.ts 共 12 个用例（key 变量合并 / 脱敏、401 切换 + 健康 key 记忆、全败回传、上游不可达 502、4xx 透传不切换、流式透传、占位凭证替换、健康端点、端口冲突递增、少于两把 key 报错），env-config 测试补多 key 构建 / 降级 / 端点解析 / 同步写入用例；全量 598 测试通过、typecheck 与 `bun run check` 通过。⑥ 沙箱端到端实测：两把假 key 打真实 bigmodel 端点，确认 runtime 请求打到代理（`http://127.0.0.1:7849/api/anthropic/v1/messages`）、config.json 写入占位 key 与代理地址、日志记录 key#0 → 401 → failover → key#1 → 401 → 回传（变量格式调整后复测通过）。注意：多把 key 必须同属一个端点（容灾只轮换 key，不改端点）。
+
+- **项目根新增软链接 `AGENTS.md` → `.claude/CLAUDE.md`**（AGENTS.md 新建）。
+  - 为什么改：AGENTS.md 是多家 agent 工具（如 ZCode 等）的项目级指令约定入口，读取的是项目根 `AGENTS.md`；此前本项目指南只存在于 `.claude/CLAUDE.md`（Claude Code 的入口），其它工具读不到。用软链接打通后两套入口共享同一份内容，单一源头维护、不会两处分叉。
+  - 改了什么：`ln -s .claude/CLAUDE.md AGENTS.md`（相对路径软链接，clone 到任何机器都有效）；`.claude/CLAUDE.md` 本身不动。
 - **欢迎横幅品牌 Z 标志回退为简约单色版（撤销赛博朋克双层残影）**（packages/zcode-tui/src/welcome-banner.ts、packages/zcode-tui/src/theme.ts、test/welcome-banner.test.ts）。
   - 为什么改：3.8.1-18 把横幅 Z 标志改成了「青色 Z + 品红错位残影」的赛博朋克双层结构（与项目 LOGO 同风格），用户试用后要求横幅里的 Z 图像回归之前的简约模式、不要赛博朋克风。
   - 改了什么：① 删除 `BRAND_GHOST` 残影层与逐列合并渲染（`mergeBrandLine()` / `brandMarkLine()` / `brandCell()`），`BRAND_MARK` 回到 4 行 10 列的单层块画 Z，直接以 accent 色整体着色；② theme.ts 删除 `brandGhost` 主题色（唯一调用方就是残影层，无其它引用）；③ 测试同步：双层残影用例改回单层块画断言、删除品红 ghost 颜色断言、48 列截断断言随标志宽度 12 → 10 列调整。`bun run build:tui` 重建 dist。

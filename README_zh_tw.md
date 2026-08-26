@@ -373,7 +373,10 @@ API key、或帶自訂 provider 的直連 API key。詳細的設定步驟、重�
 
 另有扁平檔案方式：把帶註解的 `.env.example` 範本複製為 `~/.zcode/cli/.env`
 並填入 API key 與模型 ID——每次啟動時 zcode 會先把它同步進 config.json 再拉起
-runtime，無需登入或手改 JSON。
+runtime，無需登入或手改 JSON。備用 key 用編號變數（`ZCODE_API_KEY_2`、
+`ZCODE_API_KEY_3`……每變數一把 key）：多於一把時 zcode 會啟用本地回環容錯代理，
+某把 key 的請求被拒（401/403/429、5xx、連線失敗）時自動換下一把重試，詳見
+[設定文件](./docs/CONFIGURATION.md)。
 
 ## 本機開發
 

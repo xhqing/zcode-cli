@@ -7,8 +7,10 @@ import {
   buildProviderConfig,
   envFilePath,
   parseEnvFileContent,
+  resolveUpstreamBaseURL,
   syncEnvFileToConfig
 } from "../src/env-config.ts";
+import { placeholderApiKey } from "../src/key-failover.ts";
 import { userConfigPath } from "../src/model-access.ts";
 
 const temporaryDirectories: string[] = [];
@@ -56,6 +58,7 @@ describe("parseEnvFileContent", () => {
       "# header comment",
       "",
       "ZCODE_API_KEY=plain-key",
+      "ZCODE_API_KEY_2=plain-backup",
       "ZCODE_PROVIDER_NAME=\"Quoted Name\"",
       "ZCODE_MAIN_MODEL='single-quoted'",
       "OTHER_VARIABLE=ignored",
@@ -66,6 +69,7 @@ describe("parseEnvFileContent", () => {
 
     expect(values).toEqual({
       ZCODE_API_KEY: "plain-key",
+      ZCODE_API_KEY_2: "plain-backup",
       ZCODE_PROVIDER_NAME: "Quoted Name",
       ZCODE_MAIN_MODEL: "single-quoted",
       ZCODE_BASE_URL: "https://example.com/api"
@@ -127,6 +131,52 @@ describe("buildProviderConfig", () => {
     });
     expect("error" in missingBaseUrl && missingBaseUrl.error).toContain("ZCODE_BASE_URL");
   });
+
+  test("rewrites multi-key values to the failover proxy", () => {
+    const built = buildProviderConfig(
+      {
+        ZCODE_PROVIDER_ID: "bigmodel",
+        ZCODE_API_KEY: "key-a",
+        ZCODE_API_KEY_2: "key-b",
+        ZCODE_API_KEY_3: "key-a",
+        ZCODE_MAIN_MODEL: "glm-5.2"
+      },
+      { proxyBaseURL: "http://127.0.0.1:7849/api/anthropic" }
+    );
+    expect("error" in built).toBe(false);
+    if ("error" in built) return;
+    expect(built.provider.options).toEqual({
+      apiKey: placeholderApiKey,
+      apiKeyRequired: true,
+      baseURL: "http://127.0.0.1:7849/api/anthropic"
+    });
+    expect(built.failover).toEqual({ proxyBaseURL: "http://127.0.0.1:7849/api/anthropic", keyCount: 2 });
+  });
+
+  test("multi-key without a proxy degrades to the first key", () => {
+    const built = buildProviderConfig({
+      ZCODE_API_KEY: "key-a",
+      ZCODE_API_KEY_2: "key-b",
+      ZCODE_MAIN_MODEL: "glm-5.2"
+    });
+    expect("error" in built).toBe(false);
+    if ("error" in built) return;
+    expect(built.provider.options).toEqual({
+      apiKey: "key-a",
+      apiKeyRequired: true,
+      baseURL: "https://api.z.ai/api/anthropic"
+    });
+    expect(built.failover).toBeUndefined();
+  });
+});
+
+describe("resolveUpstreamBaseURL", () => {
+  test("prefers ZCODE_BASE_URL and falls back to provider defaults", () => {
+    expect(resolveUpstreamBaseURL({ ZCODE_BASE_URL: "https://example.com/api" })).toBe("https://example.com/api");
+    expect(resolveUpstreamBaseURL({})).toBe("https://api.z.ai/api/anthropic");
+    expect(resolveUpstreamBaseURL({ ZCODE_PROVIDER_ID: "bigmodel" })).toBe("https://open.bigmodel.cn/api/anthropic");
+    expect(resolveUpstreamBaseURL({ ZCODE_PROVIDER_ID: "custom" })).toBeUndefined();
+  });
 });
 
 describe("syncEnvFileToConfig", () => {
@@ -146,6 +196,32 @@ describe("syncEnvFileToConfig", () => {
       apiKey: "test-key",
       apiKeyRequired: true,
       baseURL: "https://open.bigmodel.cn/api/anthropic"
+    });
+  });
+
+  test("writes the failover proxy into config.json for multi-key files", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    await mkdir(dirname(envFilePath(env)), { recursive: true });
+    await writeFile(envFilePath(env), [
+      "ZCODE_PROVIDER_ID=bigmodel",
+      "ZCODE_API_KEY=key-a",
+      "ZCODE_API_KEY_2=key-b",
+      "ZCODE_API_KEY_3=key-c",
+      "ZCODE_MAIN_MODEL=glm-5.2"
+    ].join("\n"));
+
+    const result = await syncEnvFileToConfig(env, {
+      failoverProxyBaseURL: "http://127.0.0.1:7849/api/anthropic"
+    });
+    expect(result.applied).toBe(true);
+    expect(result.failover).toEqual({ proxyBaseURL: "http://127.0.0.1:7849/api/anthropic", keyCount: 3 });
+
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
+    expect(config.provider.bigmodel.options).toEqual({
+      apiKey: placeholderApiKey,
+      apiKeyRequired: true,
+      baseURL: "http://127.0.0.1:7849/api/anthropic"
     });
   });
 
