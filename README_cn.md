@@ -26,7 +26,7 @@
 ## 快速开始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安装与更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-17.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
 ```
 
 GitHub Release 是唯一的分发渠道，本项目不发布到 npm。包装名为

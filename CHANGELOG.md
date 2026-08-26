@@ -14,6 +14,14 @@
   - 为什么改：AGENTS.md 是多家 agent 工具（如 ZCode 等）的项目级指令约定入口，读取的是项目根 `AGENTS.md`；此前本项目指南只存在于 `.claude/CLAUDE.md`（Claude Code 的入口），其它工具读不到。用软链接打通后两套入口共享同一份内容，单一源头维护、不会两处分叉。
   - 改了什么：`ln -s .claude/CLAUDE.md AGENTS.md`（相对路径软链接，clone 到任何机器都有效）；`.claude/CLAUDE.md` 本身不动。
 
+- **三版 README 安装命令 URL 资产名 3.8.1-17 → 3.8.1-20**（README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：安装 URL 用 `releases/latest/download/zcode-cli-<版本>.tgz` 形式，资产名必须与当前 latest Release 的 asset 完全一致才能下载；自 3.8.1-18 发布起 latest 已不再是 3.8.1-17，三版 README 的安装命令一直 404（「发布后在下一个变更里更新 URL」的约定在 3.8.1-18、3.8.1-19 两轮均未执行）。
+  - 改了什么：三版 README 各 3 处安装 URL 的资产名 `zcode-cli-3.8.1-17.tgz` 统一改为 `zcode-cli-3.8.1-20.tgz`，与本次将发布的 Release 对齐——本次 Release 发布后 URL 即恢复可下载。
+
+- **版本号 3.8.1-19 → 3.8.1-20**（VERSION、package.json、test/update.test.ts、CHANGELOG.md）。
+  - 为什么改：3.8.1-19 已发 GitHub Release（v3.8.1-19，2026-08-23）且其后有新提交（多 key 容灾 1215f67、AGENTS.md 软链接），按项目 `3.8.1-N` 后缀递增惯例 bump；bump 提交 23f3956 更新了 VERSION、package.json、README 徽章与 CHANGELOG 标题，但漏改 `test/update.test.ts` 硬编码的版本断言（仍为 3.8.1-19），导致 `release:build` 全量 598 测试中 1 例失败、/release 流程在发布前校验被拦停。
+  - 改了什么：`test/update.test.ts` 的「Current version」断言同步改为 3.8.1-20（已核实为全仓唯一漏改处，其余文件无旧版本号残留），补齐后重走完整发布构建与发版流程。
+
 ## 3.8.1-19
 
 ### 变更
