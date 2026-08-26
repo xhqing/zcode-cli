@@ -2,7 +2,7 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
-## 3.8.1-19
+## 3.8.1-20 - 2026-08-26
 
 ### 变更
 
@@ -13,6 +13,11 @@
 - **项目根新增软链接 `AGENTS.md` → `.claude/CLAUDE.md`**（AGENTS.md 新建）。
   - 为什么改：AGENTS.md 是多家 agent 工具（如 ZCode 等）的项目级指令约定入口，读取的是项目根 `AGENTS.md`；此前本项目指南只存在于 `.claude/CLAUDE.md`（Claude Code 的入口），其它工具读不到。用软链接打通后两套入口共享同一份内容，单一源头维护、不会两处分叉。
   - 改了什么：`ln -s .claude/CLAUDE.md AGENTS.md`（相对路径软链接，clone 到任何机器都有效）；`.claude/CLAUDE.md` 本身不动。
+
+## 3.8.1-19
+
+### 变更
+
 - **欢迎横幅品牌 Z 标志回退为简约单色版（撤销赛博朋克双层残影）**（packages/zcode-tui/src/welcome-banner.ts、packages/zcode-tui/src/theme.ts、test/welcome-banner.test.ts）。
   - 为什么改：3.8.1-18 把横幅 Z 标志改成了「青色 Z + 品红错位残影」的赛博朋克双层结构（与项目 LOGO 同风格），用户试用后要求横幅里的 Z 图像回归之前的简约模式、不要赛博朋克风。
   - 改了什么：① 删除 `BRAND_GHOST` 残影层与逐列合并渲染（`mergeBrandLine()` / `brandMarkLine()` / `brandCell()`），`BRAND_MARK` 回到 4 行 10 列的单层块画 Z，直接以 accent 色整体着色；② theme.ts 删除 `brandGhost` 主题色（唯一调用方就是残影层，无其它引用）；③ 测试同步：双层残影用例改回单层块画断言、删除品红 ghost 颜色断言、48 列截断断言随标志宽度 12 → 10 列调整。`bun run build:tui` 重建 dist。
