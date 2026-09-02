@@ -6,6 +6,8 @@ import {
   type Component
 } from "@earendil-works/pi-tui";
 
+import type { LoginIdentity } from "./login-identity.ts";
+import { loginIdentityText } from "./login-identity.ts";
 import { sanitizeTerminalText } from "./terminal-text.ts";
 import type { ZCodeTheme } from "./theme.ts";
 
@@ -26,6 +28,8 @@ const boxTitle = "── SYSTEM INITIATED ";
 export interface WelcomeBannerOptions {
   branch?: string;
   distributionVersion?: string;
+  /** Signed-in account or API key label; omitted when access is not configured. */
+  identity?: LoginIdentity;
   runtimeVersion: string;
   workspace: string;
 }
@@ -47,6 +51,7 @@ function boxRule(prefix: "┌" | "└", width: number): string {
 export class WelcomeBanner implements Component {
   private readonly branch?: string;
   private readonly distributionVersion?: string;
+  private identity?: LoginIdentity;
   private readonly runtimeVersion: string;
   private readonly workspace: string;
 
@@ -60,8 +65,14 @@ export class WelcomeBanner implements Component {
     this.distributionVersion = options.distributionVersion
       ? bannerText(options.distributionVersion)
       : undefined;
+    this.identity = options.identity;
     this.runtimeVersion = bannerText(options.runtimeVersion);
     this.workspace = bannerText(options.workspace);
+  }
+
+  /** Updates the sign-in line after a /login round-trip without rebuilding the layout. */
+  setIdentity(identity?: LoginIdentity): void {
+    this.identity = identity;
   }
 
   render(width: number): string[] {
@@ -91,6 +102,7 @@ export class WelcomeBanner implements Component {
       ? fullVersionLine
       : compactVersionLine;
     const locationLine = this.locationLine(panelContentWidth);
+    const identityLine = this.identityLine(panelContentWidth);
     // The exit hint must stay visible without the autocomplete list: plain
     // "quit"/"exit" reads as chat input, only the /-prefixed forms exit.
     const exitHint = "/quit │ Ctrl+D to exit";
@@ -98,6 +110,9 @@ export class WelcomeBanner implements Component {
       this.theme.muted(boxRule("┌", panelWidth)),
       `${this.theme.muted("│")} ${padTerminalText(versionLine, panelContentWidth)}`,
       `${this.theme.muted("│")} ${this.theme.muted(padTerminalText(locationLine, panelContentWidth))}`,
+      ...(identityLine
+        ? [`${this.theme.muted("│")} ${this.theme.muted(padTerminalText(identityLine, panelContentWidth))}`]
+        : []),
       `${this.theme.muted("│")} ${this.theme.muted(padTerminalText(exitHint, panelContentWidth))}`,
       this.theme.muted(boxRule("└", panelWidth))
     ];
@@ -146,6 +161,11 @@ export class WelcomeBanner implements Component {
     return `${truncateToWidth(workspace, pathBudget, "…")}${separator}${branch}`;
   }
 
+  private identityLine(width: number): string | undefined {
+    if (!this.identity) return undefined;
+    return truncateToWidth(bannerText(loginIdentityText(this.identity)), width, "…");
+  }
+
   private renderCompact(width: number): string[] {
     const contentWidth = Math.max(0, width - 1);
     const primaryVersion = this.distributionVersion ?? this.runtimeVersion;
@@ -153,9 +173,11 @@ export class WelcomeBanner implements Component {
     const location = [this.displayWorkspace(), this.branch ? `branch ${this.branch}` : undefined]
       .filter((value): value is string => Boolean(value))
       .join(" · ");
+    const identityLine = this.identityLine(contentWidth);
     return [
       ` ${truncateToWidth(identity, contentWidth)}`,
       ` ${this.theme.muted(truncateToWidth(location, contentWidth, "…"))}`,
+      ...(identityLine ? [` ${this.theme.muted(identityLine)}`] : []),
       ` ${this.theme.muted(truncateToWidth("/quit │ Ctrl+D to exit", contentWidth))}`
     ];
   }

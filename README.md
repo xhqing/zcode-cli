@@ -153,7 +153,9 @@ fallback; responsive context-remaining and session-token metrics.
 **Login and permissions.** `/login` setup choices with masked API-key entry,
 redacted transcript/history and OAuth waiting state; suspended Z.AI browser
 login with terminal restoration and an optional `ZCODE_TUI_LOGIN_CMD`
-override; interactive tool-permission approval dialogs.
+override; sign-in identity (OAuth account name or masked API key) shown in
+the welcome banner and status bar; interactive tool-permission approval
+dialogs.
 
 **Attachments and rich output.** Smart clipboard paste via Ctrl+V (an image
 becomes an attachment, plain text is inserted into the editor) or `/paste-image`

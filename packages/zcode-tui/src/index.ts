@@ -21,6 +21,7 @@ import {
   refreshUpdateCache,
   type StartupUpdateCheck
 } from "../../../src/update-check.ts";
+import { readLoginIdentity, type LoginIdentity } from "./login-identity.ts";
 
 import {
   Container,
@@ -531,6 +532,8 @@ class ZCodeTui {
   private backgroundHandoffInterruptInFlight = false;
   private updateCheckAbortController?: AbortController;
   private loginRequired: boolean;
+  private loginIdentity?: LoginIdentity;
+  private welcomeBanner?: WelcomeBanner;
   private readonly loginWarning = new Text("", 1, 0);
   private readonly loginHelp = new Text("", 1, 0);
 
@@ -612,6 +615,7 @@ class ZCodeTui {
       : undefined;
     this.ui.start();
     await this.resolveTerminalColorScheme();
+    this.loginIdentity = this.loginRequired ? undefined : await this.readLoginIdentitySafely();
     this.buildLayout();
     if (notificationConfigError) {
       this.addNotice(`Unable to load notification settings: ${notificationConfigError}`, "warning");
@@ -672,12 +676,14 @@ class ZCodeTui {
   private buildLayout(): void {
     const workspace = this.options.workspaceDirectory ?? process.cwd();
     const runtimeVersion = sanitizeTerminalText(this.options.version ?? "unknown", { preserveSgr: false });
-    this.ui.addChild(new WelcomeBanner(this.theme, {
+    this.welcomeBanner = new WelcomeBanner(this.theme, {
       branch: this.options.workspaceGitBranch,
       distributionVersion: this.distributionVersion,
+      identity: this.loginIdentity,
       runtimeVersion,
       workspace
-    }));
+    });
+    this.ui.addChild(this.welcomeBanner);
     this.ui.addChild(new Divider("─", this.theme.muted));
     this.ui.addChild(this.loginWarning);
     this.ui.addChild(this.loginHelp);
@@ -724,9 +730,24 @@ class ZCodeTui {
     this.loginRequired = required;
     this.updateLoginWarning();
     if (changed && !required) {
+      void this.refreshLoginIdentity();
       void this.refreshGoal();
       void this.refreshSessionUsage();
     }
+  }
+
+  private readLoginIdentitySafely(): Promise<LoginIdentity | undefined> {
+    return readLoginIdentity().catch(() => undefined);
+  }
+
+  /** Re-reads the signed-in identity (config + credential vault) and repaints it. */
+  private async refreshLoginIdentity(): Promise<void> {
+    const identity = this.loginRequired ? undefined : await this.readLoginIdentitySafely();
+    if (identity === this.loginIdentity && this.welcomeBanner) return;
+    this.loginIdentity = identity;
+    this.welcomeBanner?.setIdentity(identity);
+    this.updateMetadata();
+    this.ui.requestRender();
   }
 
   private async runSuspendedLogin(displayInput: string, overrideCommand?: string): Promise<void> {
@@ -4475,6 +4496,15 @@ class ZCodeTui {
         text: this.theme.muted(`⚡ ${this.thoughtLevel}`),
         compactText: this.theme.muted(`⚡ ${this.thoughtLevel}`),
         priority: 60
+      });
+    }
+    if (this.loginIdentity) {
+      const label = sanitizeTerminalText(this.loginIdentity.label, { preserveSgr: false });
+      const prefix = this.loginIdentity.kind === "oauth" ? "user" : "key";
+      fields.push({
+        text: this.theme.muted(`${prefix} ${label}`),
+        compactText: this.theme.muted(label),
+        priority: 25
       });
     }
 

@@ -21,6 +21,16 @@ function banner(width: number, color = false): string[] {
   }).render(width);
 }
 
+function identityBanner(identity: { kind: "oauth" | "apiKey"; label: string }, width: number): string[] {
+  return new WelcomeBanner(createTheme(false), {
+    branch: "main",
+    distributionVersion: "3.3.5-2",
+    identity,
+    runtimeVersion: "0.15.2",
+    workspace: "/tmp/project"
+  }).render(width);
+}
+
 describe("welcome banner", () => {
   test("uses a four-line block-art Z mark", () => {
     expect(BRAND_MARK).toHaveLength(4);
@@ -114,6 +124,56 @@ describe("welcome banner", () => {
       const lines = banner(width);
       expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
     }
+  });
+
+  describe("sign-in identity line", () => {
+    const plain = (lines: string[]): string => lines.join("\n").replace(/\x1b\[[0-9;]*m/gu, "");
+
+    test("renders the OAuth account in the wide header", () => {
+      const lines = identityBanner({ kind: "oauth", label: "Alice" }, 80);
+      expect(lines).toHaveLength(6);
+      expect(plain(lines)).toContain("Signed in as Alice");
+      expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
+    });
+
+    test("renders the API key form for explicit key access", () => {
+      const output = plain(identityBanner({ kind: "apiKey", label: "916c…e2f1" }, 80));
+      expect(output).toContain("API key 916c…e2f1");
+    });
+
+    test("renders the identity in the compact layout too", () => {
+      const lines = identityBanner({ kind: "oauth", label: "Alice" }, WIDE_BANNER_MIN_WIDTH - 1);
+      expect(lines).toHaveLength(4);
+      expect(plain(lines)).toContain("Signed in as Alice");
+    });
+
+    test("truncates long labels without wrapping", () => {
+      const label = "a".repeat(60);
+      for (const width of [20, 48, 80]) {
+        const lines = identityBanner({ kind: "oauth", label }, width);
+        const output = plain(lines);
+        expect(output).toContain("Signed in as");
+        expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+      }
+    });
+
+    test("updates after a /login round-trip via setIdentity", () => {
+      const view = new WelcomeBanner(createTheme(false), {
+        runtimeVersion: "0.15.2",
+        workspace: "/tmp/project"
+      });
+      expect(plain(view.render(80))).not.toContain("Signed in as");
+      view.setIdentity({ kind: "oauth", label: "Alice" });
+      expect(plain(view.render(80))).toContain("Signed in as Alice");
+    });
+
+    test("strips untrusted terminal controls from account names", () => {
+      const output = plain(
+        identityBanner({ kind: "oauth", label: "Alice\u001b[2J" }, 80)
+      );
+      expect(output).not.toContain("\x1b[2J");
+      expect(output).toContain("Signed in as Alice");
+    });
   });
 
   test("uses theme tokens and strips untrusted terminal controls", () => {
