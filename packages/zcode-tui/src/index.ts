@@ -48,6 +48,7 @@ import { BackgroundTaskEventStore } from "./background-task-events.ts";
 import { readBackgroundTaskOutput } from "./background-task-output.ts";
 import { BoundedToolText, toolTextValue } from "./bounded-tool-text.ts";
 import { choose, promptText, type ChoiceItem } from "./choice-dialog.ts";
+import { defaultReadClipboardText } from "./clipboard-text.ts";
 import {
   colorSchemeFromRgb,
   initialColorScheme,
@@ -942,7 +943,7 @@ class ZCodeTui {
         return { consume: true };
       }
       if (matchesKey(data, "ctrl+v")) {
-        void this.attachClipboardImage();
+        void this.pasteFromClipboard();
         return { consume: true };
       }
       if (matchesKey(data, "ctrl+c")) {
@@ -2550,20 +2551,61 @@ class ZCodeTui {
       this.addNotice("Wait for the active turn before attaching an image.", "warning");
       return;
     }
-    this.updateActivity("reading clipboard…");
-    try {
-      const attachment = clipboardImageAttachment(await this.options.readClipboardImage());
-      if (!attachment) {
-        this.addNotice("No supported image found in the clipboard.", "warning");
+    const attachment = await this.readClipboardImageAttachment();
+    if (!attachment) {
+      this.addNotice("No supported image found in the clipboard.", "warning");
+      return;
+    }
+    this.attachImage(attachment);
+  }
+
+  private async pasteFromClipboard(): Promise<void> {
+    if (this.activeSubmissions === 0) {
+      const attachment = await this.readClipboardImageAttachment();
+      if (attachment) {
+        this.attachImage(attachment);
         return;
       }
-      this.pendingAttachments.push(attachment);
-      this.syncAttachmentBar();
-      this.addNotice(`${attachmentSummary([attachment])}.`, "muted");
-    } catch (error) {
-      this.addNotice(error instanceof Error ? error.message : String(error), "error");
+    }
+    const text = await this.readClipboardText();
+    if (!text) {
+      this.addNotice(this.activeSubmissions > 0
+        ? "Wait for the active turn before attaching an image."
+        : "No image or text found in the clipboard.", "warning");
+      return;
+    }
+    this.editor.insertTextAtCursor(text);
+    const lineCount = text.split("\n").length;
+    this.addNotice(lineCount > 1
+      ? `Pasted ${lineCount} lines from the clipboard.`
+      : `Pasted ${text.length} characters from the clipboard.`, "muted");
+  }
+
+  private async readClipboardImageAttachment(): Promise<PromptImageAttachment | undefined> {
+    if (!this.options.readClipboardImage) return undefined;
+    this.updateActivity("reading clipboard…");
+    try {
+      return clipboardImageAttachment(await this.options.readClipboardImage());
+    } catch {
+      return undefined;
     } finally {
       this.updateActivity(undefined);
+    }
+  }
+
+  private attachImage(attachment: PromptImageAttachment): void {
+    this.pendingAttachments.push(attachment);
+    this.syncAttachmentBar();
+    this.addNotice(`${attachmentSummary([attachment])}.`, "muted");
+  }
+
+  private async readClipboardText(): Promise<string | undefined> {
+    const read = this.options.readClipboardText ?? defaultReadClipboardText;
+    try {
+      return await read();
+    } catch (error) {
+      this.addNotice(error instanceof Error ? error.message : String(error), "error");
+      return undefined;
     }
   }
 

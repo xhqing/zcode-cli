@@ -5,10 +5,10 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--20-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--21-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
-English | [简体中文](README_cn.md) | [繁體中文](README_zh_tw.md)
+English | [简体中文](README_zh_hans.md) | [繁體中文](README_zh_hant.md)
 
 </div>
 
@@ -29,7 +29,7 @@ redistribute the extracted runtime before publishing a release.
 ## Quick start
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 zcode
 ```
 
@@ -59,9 +59,9 @@ Reopen it anytime with `/setup`; press Esc to skip.
 ## Install and update
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 # or
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 ```
 
 GitHub Releases are the only distribution channel; the project does not
@@ -155,8 +155,9 @@ redacted transcript/history and OAuth waiting state; suspended Z.AI browser
 login with terminal restoration and an optional `ZCODE_TUI_LOGIN_CMD`
 override; interactive tool-permission approval dialogs.
 
-**Attachments and rich output.** Clipboard image attachments through Ctrl+V
-or `/paste-image`, with a keyboard-selectable attachment row; compact tool
+**Attachments and rich output.** Smart clipboard paste via Ctrl+V (an image
+becomes an attachment, plain text is inserted into the editor) or `/paste-image`
+for image-only paste, with a keyboard-selectable attachment row; compact tool
 execution views with path, command, progress, result and image previews;
 parent/child Agent tool trees with resumable subagent metadata and expandable
 Prompt/Response details; syntax-highlighted Markdown code blocks with stable
@@ -267,7 +268,9 @@ or discarded before injection returns to the editable next-turn queue.
 
 ### Image attachments
 
-Press `Ctrl+V` or run `/paste-image` to attach an image from the clipboard.
+Press `Ctrl+V` to paste from the clipboard — an image becomes an attachment,
+plain text is inserted into the editor. Run `/paste-image` to attach an image
+only.
 Pending images appear above the editor as complete `[Image #N]` tokens.
 Submitting a prompt moves those images into that user turn immediately, so they
 are removed from the pending row and cannot leak into the next prompt.
@@ -493,6 +496,7 @@ commands, and [Releasing](./docs/RELEASING.md) for the release flow.
 
 This project is released under the [MIT License](./LICENSE.md).
 
+- Copyright (c) 2026 zcode-app-cli contributors (upstream project).
 - Copyright (c) 2026 All Contributors.
 - Attribution: when you reuse or redistribute this project, please keep the copyright notice and license text, and credit the project by linking back to its repository.
 - Project URL: https://github.com/xhqing/zcode-cli

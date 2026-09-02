@@ -1,5 +1,6 @@
 MIT License
 
+Copyright (c) 2026 zcode-app-cli contributors
 Copyright (c) 2026 All Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

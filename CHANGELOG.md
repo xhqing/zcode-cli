@@ -2,6 +2,34 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-21 - 2026-08-28
+
+### 变更
+
+- **LICENSE 恢复上游版权行（修复 MIT 合规缺陷）**（LICENSE.md、README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：本项目 fork 自 kingsword09/zcode-cli（上游原项目名 zcode-app-cli），fork 时把上游 LICENSE 的版权行「Copyright (c) 2026 zcode-app-cli contributors」替换成了「All Contributors」——MIT 许可证唯一的硬性条件就是保留原版权声明，替换即违规。正确做法是原行保留、自己追加新行，而不是替换。
+  - 改了什么：LICENSE.md 版权行改为两行并存（上游「zcode-app-cli contributors」在前、「All Contributors」在后追加）；三版 README 的版权与署名段同步补上游版权行（「版权所有 (c) 2026 zcode-app-cli contributors（上游项目）」）。LICENSE 末尾的 runtime 限定句（「本许可证只覆盖仓库自身封装代码，不授予 ZCode 及提取出的 runtime 的任何权利」）上游即有、fork 时已保留，本次核实无需改动。
+
+- **繁体版 README 从台湾地区用词改为通用繁体**（README_zh_tw.md）。
+  - 为什么改：用户指出繁体版 README 不要针对台湾地区的特有词汇（台湾国语用词），用通用繁体（大陆用词对应的繁体字形写法）即可——原版大量使用台湾特有词汇（專案、檔案、外掛、伺服器、快取、指令、登入、預設、精靈、支援等），与作为权威基准的简体版用词不一致。
+  - 改了什么：以 README_cn.md 为基准逐段重写，台湾特有用词全部替换为对应大陆用词的通用繁体写法——專案→項目、檔案→文件、外掛→插件、伺服器→服務器、快取→緩存、指令→命令、登入→登錄、預設→默認、精靈→嚮導、支援→支持、使用者→用戶、用戶端→客戶端、擷取→提取、實作→實現、搜尋→搜索、導覽→導航、連結→鏈接、佇列→隊列、市集→市場、剪貼簿→剪貼板、貼上→粘貼、游標→光標、詮釋資料→元數據、儲存庫→倉庫、儲存→保存、離峰→非高峰、回呼→回調、串流→流式、字元→字符、自訂→自定義、略過→跳過、匯入→導入、散布→分發、管道→渠道、套件→包、全域→全局、重灌→重裝、本機→本地、內建→內置、互動→交互、建置→構建、範本→模板、變數→變量、覆寫→覆蓋、逾時→超時、二進位→二進制、彙總→聚合 / 匯總、遮蔽→脫敏、擱置→掛起、核准→審批、情境→上下文、訊息→消息、傳送→發送、設定→設置 / 配置（按简体版逐处对齐）；目录锚点同步（#設定→#配置、#外掛管理→#插件管理、#工作區整合→#工作區集成）；顺手修正原版「[設定](…)仲介紹」的错位断词（「中介」→「中 + 介紹」）。信息内容与简体版逐段对齐（文件名于同周期内改为 README_zh_hant.md，见下条）。
+
+- **中英双语 README 文件名改用文字码命名：README_cn.md → README_zh_hans.md、README_zh_tw.md → README_zh_hant.md**（README_cn.md 改名、README_zh_tw.md 改名、README.md）。
+  - 为什么改：繁体版内容已改为通用繁体（见上条），文件名却仍是 `zh_tw`（指向台湾中文的区域语言代码），名实不符；`zh-Hans` / `zh-Hant` 是 ISO 15924 文字码（经 IETF BCP 47 用于语言标签），只区分简繁、不带地域指向，正好匹配「通用繁体 / 简体」定位；简体版 `README_cn.md` 的 `cn` 同为区域码，一并改为 `README_zh_hans.md`，两个中文版命名统一为文字码体系。
+  - 改了什么：文件系统 `mv` 改名两个文件（不经 git、暂存区未动，新文件名待 git add）；三版 README 语言导航行互链同步指向新文件名（README.md、README_zh_hans.md、README_zh_hant.md）；全仓确认无其它活引用（CHANGELOG 历史条目中的旧文件名为当时事实记录，保留不改）。
+
+- **版本号 3.8.1-20 → 3.8.1-21**（VERSION、package.json、test/update.test.ts、README.md、README_cn.md、README_zh_tw.md）。
+  - 为什么改：3.8.1-20 已发 GitHub Release（v3.8.1-20，2026-08-26），本次 LICENSE 修正是其后新变更，按项目 `3.8.1-N` 后缀递增惯例 bump 进新版本节。
+  - 改了什么：VERSION、package.json、`test/update.test.ts` 的「Current version」断言、三版 README 徽章同步改为 3.8.1-21。
+
+- **Ctrl+V 升级为智能粘贴：剪贴板有图贴图、无图退回贴文本**（packages/zcode-tui/src/clipboard-text.ts 新建、packages/zcode-tui/src/index.ts、packages/zcode-tui/src/types.ts、README.md、README_zh_hans.md、README_zh_hant.md）。
+  - 为什么改：用户希望 Cmd+V 一个键同时贴图和贴文本（符合 macOS 使用习惯）。但 Cmd+V 是终端级快捷键、按下即被终端截获为「粘贴文本」，永远到不了 TUI，zcode 层面无法分流；唯一可行路径是在终端把 Cmd+V 键映射为发送 Ctrl+V 的控制字符（\x16），再让 zcode 的 Ctrl+V 自己分流。而原 Ctrl+V 只读图——剪贴板没图时仅提示「No supported image found in the clipboard.」、文本也不贴，键映射方案会丢掉贴文本能力。故给 Ctrl+V 补上文本回退，使其成为「有图贴图、无图贴字」的智能粘贴，让终端键映射后的 Cmd+V 完整复刻原生粘贴直觉。
+  - 改了什么：① 新建 clipboard-text.ts：跨平台读剪贴板文本的内置实现（darwin 用 pbpaste；linux 依次尝试 wl-paste --no-newline 与 xclip；win32 用 powershell Get-Clipboard -Raw；输出上限 1 MiB 截断防超大文本；宿主可经新增的 options.readClipboardText 回调注入覆盖）。② index.ts：Ctrl+V 改调新的 pasteFromClipboard——turn 空闲时先读图（runtime 注入的 readClipboardImage，读图异常视同无图），有图加附件；无图则读文本插入编辑器（多行文本由编辑器 insertTextAtCursor 原生处理、可撤销）；turn 进行中不加图、但文本照常插入（与原生粘贴行为一致）。/paste-image 命令保持原语义不变（只贴图、无图时提示）。三份 README 的功能列表与「图片附件」章节同步更新。
+
+- **三版 README 安装命令 URL 资产名 3.8.1-20 → 3.8.1-21**（README.md、README_zh_hans.md、README_zh_hant.md）。
+  - 为什么改：安装 URL 用 `releases/latest/download/zcode-cli-<版本>.tgz` 形式，资产名必须与 latest Release 的 asset 完全一致才能下载；本次 3.8.1-21 发布后 latest 将指向新版本，沿用 3.8.1-20 那轮的「发版前预对齐」做法，发布后 URL 立即恢复可下载。
+  - 改了什么：三版 README 各 3 处安装 URL 的资产名 `zcode-cli-3.8.1-20.tgz` 统一改为 `zcode-cli-3.8.1-21.tgz`。
+
 ## 3.8.1-20 - 2026-08-26
 
 ### 变更

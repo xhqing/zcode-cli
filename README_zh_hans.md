@@ -5,10 +5,10 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--20-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--21-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
-[English](README.md) | 简体中文 | [繁體中文](README_zh_tw.md)
+[English](README.md) | 简体中文 | [繁體中文](README_zh_hant.md)
 
 </div>
 
@@ -26,7 +26,7 @@
 ## 快速开始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安装与更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-20.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-21.tgz
 ```
 
 GitHub Release 是唯一的分发渠道，本项目不发布到 npm。包装名为
@@ -134,8 +134,8 @@ Ctrl+N 切换模型、空输入 Tab 切换推理力度；回合脚注右侧的�
 OAuth 等待态；挂起的 Z.AI 浏览器登录（含终端恢复与可选的 `ZCODE_TUI_LOGIN_CMD`
 覆盖）；交互式工具权限审批对话框。
 
-**附件与富输出。** Ctrl+V 或 `/paste-image` 粘贴剪贴板图片附件，配键盘可选的附件
-行；紧凑的工具执行视图（路径、命令、进度、结果与图片预览）；父子 Agent 工具树
+**附件与富输出。** Ctrl+V 智能粘贴剪贴板（图片加为附件、文本直接插入编
+辑器），`/paste-image` 专贴图片，配键盘可选的附件行；紧凑的工具执行视图（路径、命令、进度、结果与图片预览）；父子 Agent 工具树
 （含可恢复的子代理元数据、可展开的 Prompt/Response 详情）；语法高亮的 Markdown
 代码块与流式期间稳定的块渲染；Pierre 风格的内联 diff（行号、语法高亮、词级变更、
 CJK 换行）；终端原生 Mermaid 预览（不支持或超大的图表回退为源码展示）。
@@ -222,7 +222,8 @@ runtime 确认注入后，消息按其实际位置进入会话记录，并使用
 
 ### 图片附件
 
-按 `Ctrl+V` 或运行 `/paste-image` 从剪贴板附加图片。待发图片以完整的 `[Image #N]`
+按 `Ctrl+V` 从剪贴板粘贴：内容是图片则加为附件，是文本则直接插入编辑
+器。运行 `/paste-image` 则只附加图片。待发图片以完整的 `[Image #N]`
 标记显示在编辑器上方。提交提示词时，这些图片立即移入该用户回合，从待发行移除，
 不会泄漏到下一个提示词。
 
@@ -409,6 +410,7 @@ issue 与 pull request。较大改动请先开 issue 讨论。本地环境搭建
 
 本项目以 [MIT 许可证](./LICENSE.md) 发布。
 
+- 版权所有 (c) 2026 zcode-app-cli contributors（上游项目）。
 - 版权所有 (c) 2026 All Contributors。
 - 署名方式：复用或再分发本项目时，请保留版权声明与许可证文本，并以链接回项目仓库的方式注明来源。
 - 项目地址：https://github.com/xhqing/zcode-cli

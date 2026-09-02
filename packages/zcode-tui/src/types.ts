@@ -117,6 +117,7 @@ export interface TuiOptions {
   setMode?: (mode: string) => Promise<unknown>;
   writeClipboardText?: (text: string) => Promise<void>;
   readClipboardImage?: (options?: { abortSignal?: AbortSignal }) => Promise<unknown>;
+  readClipboardText?: (options?: { abortSignal?: AbortSignal }) => Promise<string | undefined>;
   listMcpServers?: () => Promise<unknown>;
   refreshWorkflowPanel?: (options: { runId?: string }) => Promise<unknown>;
   stopWorkflow?: (options: { runId: string }) => Promise<unknown>;
