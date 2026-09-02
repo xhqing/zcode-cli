@@ -103,11 +103,23 @@ describe("readLoginIdentity", () => {
     );
   });
 
-  test("prefers an explicit API key over stored OAuth credentials", async () => {
+  test("prefers the OAuth account over the exchanged API key in the config", async () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel", true),
         credentials: storedUser({ displayName: "Alice" })
+      },
+      async (env) => {
+        expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "Alice" });
+      }
+    );
+  });
+
+  test("shows the API key when the stored user info cannot be decrypted", async () => {
+    await withFixture(
+      {
+        config: oauthConfig("bigmodel", true),
+        credentials: { "oauth:bigmodel:user_info": "enc:v1:garbage.value.here" }
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
@@ -134,6 +146,15 @@ describe("readLoginIdentity", () => {
       { config: oauthConfig("custom") },
       async (env) => {
         expect(await readLoginIdentity(env)).toBeUndefined();
+      }
+    );
+  });
+
+  test("shows the masked API key for custom providers", async () => {
+    await withFixture(
+      { config: oauthConfig("custom", true) },
+      async (env) => {
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
       }
     );
   });

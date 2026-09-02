@@ -32,11 +32,15 @@ function identityLabel(value: unknown): string | undefined {
 }
 
 /**
- * Resolves the signed-in identity behind the active provider: an explicit API
- * key wins (it is what the runtime actually sends), otherwise the OAuth account
- * name from the encrypted `oauth:<provider>:user_info` credential. Returns
- * undefined when neither is available — the login wizard warning covers that
- * state, so nothing identity-like should be displayed.
+ * Resolves the signed-in identity behind the active provider: the OAuth account
+ * name from the encrypted `oauth:<provider>:user_info` credential wins, and the
+ * masked API key is only shown when no OAuth login is stored. Order matters:
+ * the runtime's OAuth flow exchanges the access token for an API key and writes
+ * it into `provider.options.apiKey` (reverse-engineered from the vendor bundle),
+ * so an explicit key alongside a stored login is the login's own artifact — the
+ * user is still signed in as that account. Returns undefined when neither is
+ * available — the login wizard warning covers that state, so nothing
+ * identity-like should be displayed.
  */
 export async function readLoginIdentity(
   env: NodeJS.ProcessEnv = process.env
@@ -54,22 +58,25 @@ export async function readLoginIdentity(
   const provider = config.provider?.[providerId];
   if (!provider) return undefined;
 
+  if (oauthProviderIds.has(providerId)) {
+    try {
+      const credentials = JSON.parse(
+        await readFile(credentialsFilePath(env), "utf8")
+      ) as Record<string, string>;
+      const stored = credentials[`oauth:${providerId}:user_info`];
+      if (typeof stored === "string" && stored) {
+        const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
+        const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
+        if (label) return { kind: "oauth", label };
+      }
+    } catch {
+      // Missing vault entry or unreadable credential: fall through to the key.
+    }
+  }
+
   const apiKey = typeof provider.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
   if (apiKey) return { kind: "apiKey", label: maskApiKey(apiKey) };
-
-  if (!oauthProviderIds.has(providerId)) return undefined;
-  try {
-    const credentials = JSON.parse(
-      await readFile(credentialsFilePath(env), "utf8")
-    ) as Record<string, string>;
-    const stored = credentials[`oauth:${providerId}:user_info`];
-    if (typeof stored !== "string" || !stored) return undefined;
-    const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
-    const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
-    return label ? { kind: "oauth", label } : undefined;
-  } catch {
-    return undefined;
-  }
+  return undefined;
 }
 
 /** Banner text for the identity line, e.g. "Signed in as alice" or "API key 916c…e2f1". */

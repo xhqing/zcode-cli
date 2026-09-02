@@ -2,6 +2,14 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-22 - 2026-09-02
+
+### 变更
+
+- **登录身份显示修正：OAuth 登录优先显示账号用户名，而非登录换发的 API key**（packages/zcode-tui/src/login-identity.ts、test/login-identity.test.ts、VERSION、package.json、test/update.test.ts、README.md、README_zh_hans.md、README_zh_hant.md）。
+  - 为什么改：3.8.1-21 的实现按「provider 显式 apiKey 优先于 OAuth 凭证」判定身份，本机用户已 OAuth 登录 bigmodel.cn，TUI 却显示 `API key 916c…b5xW`——与用户要求（显示登录账号用户名）相反。逆向 vendor bundle 确认根因：runtime 的 OAuth 登录流程会用 access_token 换发 API key 并写入 config 的 `provider.options.apiKey`（zai / bigmodel 两条路径同构：`saveZaiLoginCredentials` 存凭证 → `Utn` 换 key → `UY` 写 config）——即「OAuth 登录态 + config 显式 key」并存时，那个 key 正是登录的产物、与登录账号是同一身份，「显式 key 优先」的语义判定本身就是错的。
+  - 改了什么：readLoginIdentity 优先级反转为「OAuth 账号名优先，无 OAuth 登录态才显示脱敏 key」——provider 为 zai / bigmodel 时先解密凭证文件的 `oauth:<provider>:user_info` 取 displayName / username，取到即显示 `Signed in as <用户名>`；凭证缺失 / 解密失败 / 非 OAuth provider 时回退显示 `API key <脱敏key>`，两者皆无返回 undefined。测试同步：原「显式 key 优先于 OAuth」用例反转为「OAuth 账号优先于换发 key」，新增「user_info 解密失败时回退显示 key」「自定义 provider 显示脱敏 key」两个用例（login-identity + welcome-banner 共 29 例通过）。版本号 3.8.1-21 → 3.8.1-22（3.8.1-21 已发 GitHub Release，v3.8.1-21 实测存在；bump 同步 VERSION、package.json、test/update.test.ts 断言、三版 README 徽章与安装 URL 资产名）。
+
 ## 3.8.1-21 - 2026-08-28
 
 ### 变更
