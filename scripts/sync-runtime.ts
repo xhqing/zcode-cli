@@ -310,6 +310,30 @@ export function patchRuntimeGoalFailurePause(runtime: string): string {
   );
 }
 
+/**
+ * Enable the runtime's workspace-hook trust system for the terminal TUI.
+ *
+ * The runtime ships the full trust pipeline (pending_trust → trusted_persistent
+ * states, declaration digests bound to the hook bundle, the persisted
+ * `workspace-hook-trust-v1.json` store behind `zcode hooks trust grant`), and
+ * the headless protocol path already passes `workspaceHookTrustEnabled:!0`.
+ * The TUI session factory, however, never passes the flag, so
+ * `createZCodeApp` boots with the feature disabled and every session logs
+ * `workspace_hook.feature_disabled` — project-level hooks in
+ * `.zcode/config.json` never run, no matter what the CLI granted. The TUI does
+ * not wire a review host either; grants recorded via the CLI are persisted, so
+ * passing just the enable flag is enough.
+ */
+export function patchRuntimeWorkspaceHookTrust(runtime: string): string {
+  const alreadyPatchedPattern = /onWorkflowEvent:[A-Za-z_$][\w$]*\.onWorkflowEvent,workspaceHookTrustEnabled:!0\}\)/u;
+  if (alreadyPatchedPattern.test(runtime)) return runtime;
+  const sessionFactoryPattern = /(permissionBroker:[A-Za-z_$][\w$]*,sessionId:[A-Za-z_$][\w$]*,skipUserConfig:[A-Za-z_$][\w$]*\.skipUserConfig,uiDetectedLocale:[A-Za-z_$][\w$]*,uiLocale:[A-Za-z_$][\w$]*,userConfigPath:[A-Za-z_$][\w$]*\.userConfigPath,version:[A-Za-z_$][\w$]*,onWorkflowEvent:[A-Za-z_$][\w$]*\.onWorkflowEvent)\}\)/u;
+  if (!sessionFactoryPattern.test(runtime)) {
+    throw new Error("ZCode runtime is incompatible with the workspace-hook trust patch (TUI session factory anchor missing).");
+  }
+  return runtime.replace(sessionFactoryPattern, "$1,workspaceHookTrustEnabled:!0})");
+}
+
 export function patchRuntimeTuiBridge(runtime: string): string {
   const transcriptMessageIdPattern = /\.push\(\{content:[A-Za-z_$][\w$]*,messageId:[A-Za-z_$][\w$]*\.info\.id,role:"user"\}\)/u;
   const transcriptAgentMessageIdPattern = /messageId:[A-Za-z_$][\w$]*\.info\.id,role:"agent"/u;
@@ -895,10 +919,12 @@ async function installTuiBridge(nextVendor: string): Promise<void> {
         patchRuntimeZaiDesktopOAuth(
           patchRuntimeOAuthHttpErrors(
             patchRuntimeHttpNoContent(
-              patchRuntimeAgentAutoBackground(
-                patchRuntimeDetachedAgentLifecycle(
-                  patchRuntimeTerminalToolProjection(
-                    patchRuntimeGoalFailurePause(patchRuntimeTuiBridge(runtime))
+              patchRuntimeWorkspaceHookTrust(
+                patchRuntimeAgentAutoBackground(
+                  patchRuntimeDetachedAgentLifecycle(
+                    patchRuntimeTerminalToolProjection(
+                      patchRuntimeGoalFailurePause(patchRuntimeTuiBridge(runtime))
+                    )
                   )
                 )
               )

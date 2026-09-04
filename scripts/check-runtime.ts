@@ -12,6 +12,7 @@ import {
   patchRuntimeGoalFailurePause,
   patchRuntimeHttpNoContent,
   patchRuntimeLoginModelDefaults,
+  patchRuntimeWorkspaceHookTrust,
   supportsMultiMessageFileRewind
 } from "./sync-runtime.ts";
 
@@ -41,6 +42,7 @@ if (patchRuntimeLoginModelDefaults(runtimeSource) !== runtimeSource
   || patchRuntimeContextCacheFromParts(runtimeSource) !== runtimeSource
   || patchRuntimeGoalFailurePause(runtimeSource) !== runtimeSource
   || patchRuntimeHttpNoContent(runtimeSource) !== runtimeSource
+  || patchRuntimeWorkspaceHookTrust(runtimeSource) !== runtimeSource
   || !hasRuntimeHttpNoContentGuard(runtimeSource)
   || !runtimeSource.includes("nSi(e.projection,t?.cache)??t")
   || !runtimeSource.includes('"plugin://"')

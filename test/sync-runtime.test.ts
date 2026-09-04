@@ -15,6 +15,7 @@ import {
   patchRuntimeOAuthHttpErrors,
   patchRuntimeTerminalToolProjection,
   patchRuntimeTuiBridge,
+  patchRuntimeWorkspaceHookTrust,
   patchRuntimeZaiDesktopOAuth,
   resolveArtifactUrl,
   resolveLatestRuntimeLock,
@@ -851,5 +852,21 @@ describe("runtime synchronization", () => {
     expect(statuses).toEqual(["paused"]);
     expect(patchRuntimeGoalFailurePause(patched)).toBe(patched);
     expect(() => patchRuntimeGoalFailurePause("incompatible runtime")).toThrow(/incompatible/);
+  });
+
+  test("enables the workspace-hook trust system for the TUI session factory", () => {
+    const runtime = [
+      "let se=z({browserControlPort:Z?.browserControlPort,env:N,projectConfigPath:e.projectConfigPath,",
+      "resume:X!==void 0,",
+      "runtimeConfig:{modelStreaming:\"on\",titleGeneration:uln,workingDirectory:J},",
+      "permissionBroker:S,sessionId:X,skipUserConfig:e.skipUserConfig,uiDetectedLocale:i,",
+      "uiLocale:m,userConfigPath:e.userConfigPath,version:r,onWorkflowEvent:b.onWorkflowEvent})",
+      "}catch(le){}"
+    ].join("");
+    const patched = patchRuntimeWorkspaceHookTrust(runtime);
+
+    expect(patched).toContain("onWorkflowEvent:b.onWorkflowEvent,workspaceHookTrustEnabled:!0})");
+    expect(patchRuntimeWorkspaceHookTrust(patched)).toBe(patched);
+    expect(() => patchRuntimeWorkspaceHookTrust("incompatible runtime")).toThrow(/incompatible/);
   });
 });
