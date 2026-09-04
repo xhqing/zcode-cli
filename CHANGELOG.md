@@ -2,7 +2,7 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
-## 3.8.1-23 - 2026-09-04
+## 3.8.1-24 - 2026-09-04
 
 ### 变更
 
@@ -14,6 +14,11 @@
   - 为什么改：用户在 bigmodel.cn 改了用户名，TUI 横幅与状态栏仍显示旧名。排查实锤根因——显示名读的是本机共享凭证库 `~/.zcode/v2/credentials.json` 的 `oauth:bigmodel:user_info` **加密快照**（含 username / displayName），该快照是 ZCode Desktop 当年 OAuth 登录时写入的（Desktop 与 CLI 共享 vault）；此后无任何机制刷新它：Desktop 已卸载，官方 runtime 的 bigmodel 登录流程（逆向 vendor/zcode.cjs 实锤）只把换发的 API key 写进 `~/.zcode/cli/config.json`、从不写 vault 的 user_info——所以重新 `zcode login` 也刷不掉旧名。实时从服务端拉最新用户名不可依赖：正主端点 `GET bigmodel.cn/api/biz/customer/getCustomerInfo`（网页个人中心与 runtime 登录链路 `Ghr→Uhr` 同款）当前从本机直连 / 走代理均被阿里云 WAF 挑战拦截（200 + 空 body + `acw_tc` cookie），monitor 域又无用户信息端点。故提供手动同步命令作为唯一可靠刷新途径。
   - 改了什么：① src/usage.ts 新增 `encryptCredential()`——`decryptCredential()` 的对偶（`enc:v1:` AES-256-GCM、随机 12 字节 IV、16 字节 tag、三段 base64url，密钥派生与 runtime 同款），使 CLI 可回写 runtime 可读的加密凭证；② 新建 src/identity.ts——`zcode identity` 显示活跃 provider 的身份（OAuth 账号名或脱敏 API key，读取优先级与 TUI 的 login-identity.ts 镜像，包依赖方向不允许反向 import 故独立实现）；`zcode identity set <name>` 重写活跃 provider（`oauth:active_provider` 标记优先，回落 config.model.main 前缀，缺省 bigmodel）的 user_info 快照 username + displayName，保留 id / avatarUrl 等其它字段与 vault 相邻条目（login_attribution 等），无快照时新建条目；`zcode identity clear` 删除快照回落 API key 显示；名称上限 64 字符，非 OAuth provider 拒绝 set；vault 回写 0600 权限；③ launcher.ts 在 stats 路由后接入 identity 路由；④ 新建 test/identity.test.ts 13 用例（加解密往返 + 随机 IV、命令参数判定、快照读取三优先级、set 保留字段 / 新建条目 / 两类拒绝、show / clear / no-op / 缺失态）。`bun run build:launcher` 重建，全量 `bun test` 630 pass / 0 fail（78 files）。本机实测 `zcode identity` 输出 `Provider: bigmodel / Identity: signed in as <旧名>`（复现问题现场）；vault 全局共享，set 后 TUI 新会话即生效。
   - 边界说明：`identity set` 是「本地显示名同步」，不改服务端账号信息；若未来 WAF 放行实时接口，可再立项自动刷新（当前不立项——实时拉取在现网不可用，自动刷新会静默失败回落旧快照，徒增复杂度）。
+  - 版本说明：本批改动原被记在 3.8.1-23 条目下，但 v3.8.1-23 已发 GitHub Release（2026-09-04，Release notes 不含这两条），故 commit 后 bump 版本号 3.8.1-23 → 3.8.1-24 并将两条归位至本条目（3.8.1-23 条目恢复为发布时形态）；同步更新 VERSION、package.json、test/update.test.ts 断言、三版 README 徽章与安装 URL 资产名。
+
+## 3.8.1-23 - 2026-09-04
+
+### 变更
 
 - **TUI 会话工厂启用 workspace-hook 信任体系：bootstrap 传 `workspaceHookTrustEnabled: true`（TODO T1 完成）**（scripts/sync-runtime.ts、scripts/check-runtime.ts、vendor/zcode.cjs、test/sync-runtime.test.ts、TODO.md、TODO-archive.md 新建）。
   - 为什么改：runtime 已内置完整的项目级 workspace hooks 信任体系（`pending_trust → trusted_persistent` 状态机、声明 sha256 + bundle 摘要绑定、持久 trust store `~/.zcode/security/workspace-hook-trust-v1.json`、`zcode hooks trust status/grant/revoke` 命令族），headless 协议路径（`--prompt`）也已自带 `workspaceHookTrustEnabled:!0`；唯独 zcode-cli 的 TUI 会话工厂从未传该参数 → runtime 侧恒 false → 项目级 hooks 整体禁用（CLI grant 已授信也无效，每次会话日志打 `workspace_hook.feature_disabled`）。后果是 DayTradingAgent 被迫把两条安全 hook 挂到用户级 `~/.zcode/cli/config.json` 兜底，而该路径 2026-09-04 实测会被客户端设置保存的旧快照整体重写冲掉——项目级单源才是稳态。
