@@ -2,6 +2,14 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## [Unreleased]
+
+### 变更
+
+- **新建项目根 TODO.md、登记 T1（会话 bootstrap 传 `workspaceHookTrustEnabled: true`）**（TODO.md 新建）。
+  - 为什么改：DayTradingAgent（Victor）侧 2026-09-03~04 验证发现 zcode-cli 构造会话时从不传该参数 → runtime 已内置的项目级 workspace hooks 信任体系被宿主能力开关整体禁用（CLI grant 已授信、trust store 已持久化，只差这个开关）；按跨项目分工，该开发主体从 DayTradingAgent TODO T140 ① 拆转到本项目登记。
+  - 改了什么：新建 TODO.md（四级紧急度分节框架 + 编号时间戳规范），登记 🟠 T1——含任务描述、`vendor/zcode.cjs` 三处 offset 定位材料（构造点 ≈11703354、bootstrap 消费点 ≈11762913、`!0` 参考样例 ≈11922028）、完成后验证口径（DayTradingAgent 侧新会话重跑凭证探针 + 日志无 `feature_disabled`，随后撤回用户级兜底切项目级单源）、同源风险提示（2026-09-04 实测客户端设置保存用旧配置快照整体重写 config.json、冲掉外部对 hooks 段的修改——是否另行立项待裁定）。本项目尚无 TODO-archive.md（首条待办、暂无归档），随首次归档再建。
+
 ## 3.8.1-22 - 2026-09-02
 
 ### 变更
