@@ -115,6 +115,36 @@ actual deducted credits per model including all promotions and off-peak
 discounts, split into input / cache / output buckets. No token or request
 failure simply omits the section and keeps the local estimate.
 
+## Sign-in identity
+
+```bash
+zcode identity              # show the identity behind the active provider
+zcode identity set <name>   # sync the local sign-in display name
+zcode identity clear        # drop it and fall back to the masked API key
+```
+
+The TUI banner and status line show the OAuth account name from an encrypted
+`oauth:<provider>:user_info` snapshot in the shared credential vault
+(`~/.zcode/v2/credentials.json`). That snapshot is written once at OAuth
+login and nothing refreshes it afterwards — renaming your account on
+bigmodel.cn keeps the TUI showing the old name, and re-running `zcode login`
+does not rewrite it (the runtime only stores the exchanged API key).
+`zcode identity set` is the manual sync point: it rewrites the
+username/displayName fields in the snapshot (keeping id/avatar and all
+neighboring vault entries intact), and new TUI sessions pick it up
+immediately.
+
+Account switches are handled automatically, in two layers:
+
+- The banner and status line re-read the identity after every login —
+  switching Z.AI accounts updates the name without restarting the TUI (the
+  Z.AI OAuth flow rewrites the snapshot itself).
+- BigModel OAuth and API-key logins never rewrite the snapshot, so after one
+  of those the stored name can no longer be attributed to the signed-in
+  account. When the login changes the provider's API key, the TUI clears the
+  stale name and falls back to the masked key (same-account re-login keeps
+  the name). Re-pin the current account with `zcode identity set <name>`.
+
 ## Architecture
 
 ```text

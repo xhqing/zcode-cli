@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  isLoginWithoutIdentityRefresh,
   loginFailureDiagnostic,
   shouldSuspendForLoginCommand,
   shouldUseNoBrowserForLogin,
@@ -12,6 +13,17 @@ describe("TUI external login routing", () => {
     expect(shouldSuspendForLoginCommand("/login zai-coding-plan")).toBe(true);
     expect(shouldSuspendForLoginCommand("/login bigmodel-coding-plan")).toBe(false);
     expect(shouldSuspendForLoginCommand("/login zai-coding-plan-api-key")).toBe(false);
+  });
+
+  test("flags login variants that never refresh the stored account name", () => {
+    expect(isLoginWithoutIdentityRefresh("/login bigmodel-coding-plan")).toBe(true);
+    expect(isLoginWithoutIdentityRefresh("/login bigmodel-coding-plan-api-key 82bbdf98")).toBe(true);
+    expect(isLoginWithoutIdentityRefresh("/login zai-coding-plan-api-key 916cee01")).toBe(true);
+    // The Z.AI OAuth flow rewrites the vault snapshot itself; the plain menu
+    // form only opens the picker, neither switches the key directly.
+    expect(isLoginWithoutIdentityRefresh("/login zai-coding-plan")).toBe(false);
+    expect(isLoginWithoutIdentityRefresh("/login")).toBe(false);
+    expect(isLoginWithoutIdentityRefresh("/login bigmodel-coding-plans")).toBe(false);
   });
 
   test("uses browserless login for SSH and displayless Linux sessions", () => {

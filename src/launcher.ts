@@ -30,6 +30,7 @@ import {
 import { requestAppServer } from "./app-server-client.ts";
 import { runPluginCommand } from "./plugin-cli.ts";
 import { isUpdateInvocation, runSelfUpdate } from "./update.ts";
+import { isIdentityInvocation, runIdentityCommand } from "./identity.ts";
 import { isStatsInvocation, runStatsReport } from "./usage.ts";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -432,6 +433,10 @@ export async function main(args: string[]): Promise<number> {
 
   if (isStatsInvocation(args)) {
     return await runStatsReport({ args });
+  }
+
+  if (isIdentityInvocation(args)) {
+    return await runIdentityCommand({ args });
   }
 
   let setupPending = false;

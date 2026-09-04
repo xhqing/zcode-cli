@@ -21,6 +21,10 @@ import {
   refreshUpdateCache,
   type StartupUpdateCheck
 } from "../../../src/update-check.ts";
+import {
+  clearIdentitiesWithChangedKeys,
+  readProviderApiKeySnapshot
+} from "../../../src/identity.ts";
 import { readLoginIdentity, type LoginIdentity } from "./login-identity.ts";
 
 import {
@@ -387,6 +391,18 @@ export function shouldSuspendForLoginCommand(command: string): boolean {
   return command === "/login zai-coding-plan";
 }
 
+/**
+ * Login variants whose runtime flow rewrites config.json (new API key) but never
+ * refreshes the vault `oauth:<provider>:user_info` snapshot — BigModel OAuth and
+ * both API-key variants. After one of these, a stored account name may belong to
+ * the previous account, so the caller compares API keys and clears stale names.
+ * The Z.AI OAuth flow is excluded: it rewrites the snapshot itself.
+ */
+export function isLoginWithoutIdentityRefresh(command: string): boolean {
+  return /^\/login\s+bigmodel-coding-plan(?:\s|$)/u.test(command)
+    || /^\/login\s+(?:zai|bigmodel)-coding-plan-api-key(?:\s|$)/u.test(command);
+}
+
 export function suspendedZaiLoginCommand(
   env: NodeJS.ProcessEnv = process.env,
   runtimeExecutable = process.execPath,
@@ -729,8 +745,10 @@ class ZCodeTui {
     const changed = this.loginRequired !== required;
     this.loginRequired = required;
     this.updateLoginWarning();
+    // Refresh on every call, not just transitions: switching accounts while
+    // already signed in never flips this flag, yet the identity on disk changed.
+    void this.refreshLoginIdentity();
     if (changed && !required) {
-      void this.refreshLoginIdentity();
       void this.refreshGoal();
       void this.refreshSessionUsage();
     }
@@ -743,11 +761,30 @@ class ZCodeTui {
   /** Re-reads the signed-in identity (config + credential vault) and repaints it. */
   private async refreshLoginIdentity(): Promise<void> {
     const identity = this.loginRequired ? undefined : await this.readLoginIdentitySafely();
-    if (identity === this.loginIdentity && this.welcomeBanner) return;
+    const unchanged = identity?.kind === this.loginIdentity?.kind
+      && identity?.label === this.loginIdentity?.label;
+    if (unchanged && this.welcomeBanner) return;
     this.loginIdentity = identity;
     this.welcomeBanner?.setIdentity(identity);
     this.updateMetadata();
     this.ui.requestRender();
+  }
+
+  /**
+   * Runs after a login variant that cannot refresh the stored account name
+   * (see `isLoginWithoutIdentityRefresh`): when the provider's API key changed,
+   * the stored name can no longer be attributed to the signed-in account, so it
+   * is cleared and the display falls back to the masked key.
+   */
+  private async clearStaleIdentityAfterLogin(before: Record<string, string>): Promise<void> {
+    const cleared = await clearIdentitiesWithChangedKeys(before).catch(() => [] as string[]);
+    if (cleared.length === 0) return;
+    await this.refreshLoginIdentity();
+    this.addNotice(
+      `Sign-in identity cleared for ${cleared.join(", ")}: the stored name may belong to the previous account. `
+      + "Run `zcode identity set <name>` to display the current account name.",
+      "muted"
+    );
   }
 
   private async runSuspendedLogin(displayInput: string, overrideCommand?: string): Promise<void> {
@@ -1238,11 +1275,18 @@ class ZCodeTui {
     let nextCommand: QueuedSubmission | undefined;
     try {
       if (input.startsWith("/") || !this.options.sendInput) {
+        // Snapshot provider API keys before login variants that never refresh
+        // the stored account name, so the post-login sweep can detect a
+        // switched account by its changed key.
+        const loginKeySnapshot = isLoginWithoutIdentityRefresh(input)
+          ? await readProviderApiKeySnapshot()
+          : undefined;
         const result = await this.options.submitPrompt(
           input.startsWith("/") ? input : promptInput(runtimeInput, attachments),
           callOptions
         );
         await this.handleResult(result, true, settingTargetForCommand(input));
+        if (loginKeySnapshot) await this.clearStaleIdentityAfterLogin(loginKeySnapshot);
         accepted = true;
       } else {
         const preparedInput = promptInput(runtimeInput, attachments);

@@ -1,4 +1,4 @@
-import { createDecipheriv, createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
@@ -171,6 +171,28 @@ export function decryptCredential(value: string, env: NodeJS.ProcessEnv = proces
     decipher.update(Buffer.from(dataPart, "base64url")),
     decipher.final()
   ]).toString("utf8");
+}
+
+/**
+ * Encrypts a runtime-compatible credential (`enc:v1:` AES-256-GCM, 12-byte IV,
+ * 16-byte tag, all base64url) — the counterpart of `decryptCredential`, using
+ * the same key derivation so the runtime and the TUI can read what we write.
+ */
+export function encryptCredential(value: string, env: NodeJS.ProcessEnv = process.env): string {
+  const configuredSecret = env.ZCODE_CREDENTIAL_SECRET?.trim();
+  let username = "unknown";
+  try {
+    username = userInfo().username;
+  } catch {
+    // keep the fallback username
+  }
+  const secret = configuredSecret
+    || `zcode-credential-fallback:${process.platform}:${homedir()}:${username}`;
+  const key = createHash("sha256").update(secret).digest();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return `enc:v1:${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${ciphertext.toString("base64url")}`;
 }
 
 interface MonitorDetailResponse {

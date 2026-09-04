@@ -101,6 +101,32 @@ zcode-cli 的模型請求由官方 ZCode runtime 發出（請求頭帶
 模型列出實際抵扣積分（已含促銷與非高峰折扣），並分輸入 / 緩存 / 輸出三桶。無
 憑據或請求失敗時省略該段、僅保留本地估算。
 
+## 登錄身份
+
+```bash
+zcode identity              # 查看活躍 provider 的登錄身份
+zcode identity set <名稱>   # 手動同步本地登錄顯示名
+zcode identity clear        # 刪除快照，回落顯示脫敏 API key
+```
+
+TUI 橫幅與狀態欄顯示的登錄帳號名來自共享憑證庫
+（`~/.zcode/v2/credentials.json`）裡加密的 `oauth:<provider>:user_info`
+**快照**。該快照只在 OAuth 登錄那一刻寫入，此後沒有任何機制刷新它——在
+bigmodel.cn 上改了用戶名後 TUI 會一直顯示舊名，重新 `zcode login` 也無濟於事
+（runtime 只保存換發的 API key，不回寫用戶信息快照）。
+`zcode identity set` 就是手動同步入口：重寫快照中的 username /
+displayName（保留 id / 頭像等其餘字段與憑證庫相鄰條目），新開的 TUI 會話
+立即生效。
+
+切換帳號由兩層機制自動處理：
+
+- TUI 橫幅與狀態欄在每次登錄後都會重新讀取身份——切換 Z.AI 帳號後無需
+  重啟 TUI 即顯示新名（Z.AI OAuth 登錄流程本身會重寫快照）。
+- BigModel OAuth 與 API key 登錄從不回寫快照，這類登錄之後存儲的帳號名
+  無法再歸因到當前登錄帳號。當登錄使 provider 的 API key 發生變化時，
+  TUI 自動清除舊名、回落顯示脫敏 API key（同帳號重新登錄則保留原名）；
+  之後可用 `zcode identity set <名稱>` 重新固定當前帳號的顯示名。
+
 ## 架構
 
 ```text
