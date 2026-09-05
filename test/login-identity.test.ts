@@ -73,6 +73,12 @@ const oauthConfig = (providerId: string, withApiKey = false): unknown => ({
   }
 });
 
+/** Vault entries of a stored OAuth login for the provider. */
+const login = (providerId: string, extra: Record<string, string> = {}): Record<string, string> => ({
+  [`oauth:${providerId}:access_token`]: "enc:v1:token",
+  ...extra
+});
+
 const storedUser = (user: unknown): Record<string, string> => ({
   "oauth:bigmodel:user_info": encryptCredential(JSON.stringify(user))
 });
@@ -82,7 +88,7 @@ describe("readLoginIdentity", () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel"),
-        credentials: storedUser({ username: "pkcmbgx3", displayName: "Alice" })
+        credentials: login("bigmodel", storedUser({ username: "pkcmbgx3", displayName: "Alice" }))
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "Alice" });
@@ -94,9 +100,9 @@ describe("readLoginIdentity", () => {
     await withFixture(
       {
         config: oauthConfig("zai"),
-        credentials: {
+        credentials: login("zai", {
           "oauth:zai:user_info": encryptCredential(JSON.stringify({ username: "pkcmbgx3" }))
-        }
+        })
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "pkcmbgx3" });
@@ -108,7 +114,7 @@ describe("readLoginIdentity", () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel", true),
-        credentials: storedUser({ displayName: "Alice" })
+        credentials: login("bigmodel", storedUser({ displayName: "Alice" }))
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "Alice" });
@@ -120,7 +126,7 @@ describe("readLoginIdentity", () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel", true),
-        credentials: { "oauth:bigmodel:user_info": "enc:v1:garbage.value.here" }
+        credentials: login("bigmodel", { "oauth:bigmodel:user_info": "enc:v1:garbage.value.here" })
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
@@ -128,16 +134,16 @@ describe("readLoginIdentity", () => {
     );
   });
 
-  test("returns undefined when only the zai vault entry exists for bigmodel access", async () => {
+  test("a zai login identifies itself even while model.main points at bigmodel", async () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel"),
-        credentials: {
+        credentials: login("zai", {
           "oauth:zai:user_info": encryptCredential(JSON.stringify({ displayName: "Alice" }))
-        }
+        })
       },
       async (env) => {
-        expect(await readLoginIdentity(env)).toBeUndefined();
+        expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "Alice" });
       }
     );
   });
@@ -151,11 +157,25 @@ describe("readLoginIdentity", () => {
     );
   });
 
-  test("shows the masked API key for custom providers", async () => {
+  test("custom-provider access without a login shows the signed-out state", async () => {
     await withFixture(
       { config: oauthConfig("custom", true) },
       async (env) => {
-        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+        expect(await readLoginIdentity(env)).toEqual({ kind: "signedOut", label: "" });
+      }
+    );
+  });
+
+  test("custom-provider env-slot access strips the env- prefix for display", async () => {
+    await withFixture(
+      {
+        config: {
+          model: { main: "env-bigmodel/glm-5.3" },
+          provider: { "env-bigmodel": { options: { apiKey: "916cbd2f-example-key-value-e2f1" } } }
+        }
+      },
+      async (env) => {
+        expect(await readLoginIdentity(env)).toEqual({ kind: "signedOut", label: "" });
       }
     );
   });
@@ -190,7 +210,7 @@ describe("readLoginIdentity", () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel"),
-        credentials: storedUser({ displayName: "a".repeat(80) })
+        credentials: login("bigmodel", storedUser({ displayName: "a".repeat(80) }))
       },
       async (env) => {
         expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "a".repeat(24) });
@@ -202,7 +222,10 @@ describe("readLoginIdentity", () => {
 describe("readLoginIdentity key-name mapping", () => {
   test("shows the mapped account name for a bigmodel API key", async () => {
     await withFixture(
-      { config: oauthConfig("bigmodel", true) },
+      {
+        config: oauthConfig("bigmodel", true),
+        credentials: login("bigmodel")
+      },
       async (env) => {
         await writeFile(
           bigmodelUsersPath(env),
@@ -215,7 +238,10 @@ describe("readLoginIdentity key-name mapping", () => {
 
   test("keeps the masked key when the mapping file does not cover the key", async () => {
     await withFixture(
-      { config: oauthConfig("bigmodel", true) },
+      {
+        config: oauthConfig("bigmodel", true),
+        credentials: login("bigmodel")
+      },
       async (env) => {
         await writeFile(bigmodelUsersPath(env), JSON.stringify({ "another-key": "Other account" }));
         expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
@@ -225,7 +251,10 @@ describe("readLoginIdentity key-name mapping", () => {
 
   test("keeps the masked key for a malformed mapping file", async () => {
     await withFixture(
-      { config: oauthConfig("bigmodel", true) },
+      {
+        config: oauthConfig("bigmodel", true),
+        credentials: login("bigmodel")
+      },
       async (env) => {
         await writeFile(bigmodelUsersPath(env), "{not json");
         expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
@@ -233,7 +262,7 @@ describe("readLoginIdentity key-name mapping", () => {
     );
   });
 
-  test("ignores the mapping for non-bigmodel providers", async () => {
+  test("ignores the mapping while signed out on a custom provider", async () => {
     await withFixture(
       { config: oauthConfig("custom", true) },
       async (env) => {
@@ -241,7 +270,7 @@ describe("readLoginIdentity key-name mapping", () => {
           bigmodelUsersPath(env),
           JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
         );
-        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+        expect(await readLoginIdentity(env)).toEqual({ kind: "signedOut", label: "" });
       }
     );
   });
@@ -250,7 +279,7 @@ describe("readLoginIdentity key-name mapping", () => {
     await withFixture(
       {
         config: oauthConfig("bigmodel", true),
-        credentials: storedUser({ displayName: "Alice" })
+        credentials: login("bigmodel", storedUser({ displayName: "Alice" }))
       },
       async (env) => {
         await writeFile(
@@ -264,9 +293,10 @@ describe("readLoginIdentity key-name mapping", () => {
 });
 
 describe("loginIdentityText", () => {
-  test("labels OAuth accounts and API keys differently", () => {
+  test("labels OAuth accounts, API keys and the signed-out state differently", () => {
     expect(loginIdentityText({ kind: "oauth", label: "Alice" })).toBe("Signed in as Alice");
     expect(loginIdentityText({ kind: "apiKey", label: "916c…e2f1" })).toBe("API key 916c…e2f1");
     expect(loginIdentityText({ kind: "named", label: "Work account" })).toBe("Signed in as Work account");
+    expect(loginIdentityText({ kind: "signedOut", label: "" })).toBe("Not signed in");
   });
 });

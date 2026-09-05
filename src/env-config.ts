@@ -1,22 +1,24 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 
 import { updateUserConfig, userConfigPath, type UserConfigRecord } from "./model-access.ts";
 import { collectApiKeys, numberedApiKeyPattern, placeholderApiKey } from "./key-failover.ts";
 
 /**
- * Environment-file configuration.
+ * Custom-provider file configuration.
  *
  * Users who prefer editing one flat file over hand-editing the nested
- * config.json keep their model settings in `~/.zcode/cli/.env` (copy the
- * template from `.env.example`). The launcher reads that file on every start
- * and syncs it into config.json before the runtime boots: the `.env` file is
- * the authority for its own `env-<provider-id>` provider entry and the
- * `model` block, every other config.json block stays untouched — including
- * the official `zai`/`bigmodel` slots owned by `/login` OAuth flows. An
- * absent or empty `.env` never writes anything, so OAuth logins and
- * hand-edited configs keep working unchanged.
+ * config.json keep their model settings in `~/.zcode/cli/custom-provider.env`
+ * (copy the template from `custom-provider.env.example`). The file is the
+ * authority for the signed-out state: while no OAuth login is stored, the
+ * launcher syncs it into config.json on every start — the `env-<provider-id>`
+ * provider entry and the `model` block — and every other config.json block
+ * stays untouched, including the official `zai`/`bigmodel` slots owned by
+ * `/login` OAuth flows. Once a login is stored, the sync stops rewriting the
+ * `model` block (the login's official slot takes over) and reclaims it again
+ * automatically after a logout, so logins and the custom provider never
+ * require manually removing or restoring the file.
  */
 
 export const envFileVariables = [
@@ -55,6 +57,8 @@ export interface EnvFileSyncResult {
   failover?: FailoverBuild;
 }
 
+export const customProviderEnvFileName = "custom-provider.env";
+
 export function envFilePath(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
@@ -64,7 +68,34 @@ export function envFilePath(
   if (configured) return configured;
   const path = platform === "win32" ? win32 : posix;
   const configuredHome = (platform === "win32" ? env.USERPROFILE : env.HOME)?.trim();
-  return path.join(configuredHome || fallbackHome, ".zcode", "cli", ".env");
+  return path.join(configuredHome || fallbackHome, ".zcode", "cli", customProviderEnvFileName);
+}
+
+/**
+ * One-time rename of the legacy `~/.zcode/cli/.env` to
+ * `custom-provider.env`. Returns the new path when a rename happened, so the
+ * caller can tell the user. Skipped entirely when `ZCODE_ENV_FILE` overrides
+ * the location or the new name already exists.
+ */
+export async function migrateLegacyEnvFile(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string | undefined> {
+  if (env.ZCODE_ENV_FILE?.trim()) return undefined;
+  const nextPath = envFilePath(env);
+  const legacyPath = join(dirname(nextPath), ".env");
+  try {
+    await access(nextPath);
+    return undefined;
+  } catch {
+    // New file absent: a legacy file is worth renaming.
+  }
+  try {
+    await access(legacyPath);
+  } catch {
+    return undefined;
+  }
+  await rename(legacyPath, nextPath);
+  return nextPath;
 }
 
 /**
@@ -162,11 +193,72 @@ export interface ProviderBuild {
 }
 
 /**
- * Prefix for the config.json provider slot the env file writes. The env file
- * never touches the official `zai`/`bigmodel` slots (those belong to `/login`
- * OAuth flows), so env-file keys and OAuth logins cannot overwrite each other.
+ * Prefix for the config.json provider slot the custom-provider file writes.
+ * The file never touches the official `zai`/`bigmodel` slots (those belong to
+ * `/login` OAuth flows), so custom-provider keys and OAuth logins cannot
+ * overwrite each other.
  */
 export const envProviderSlotPrefix = "env-";
+
+/**
+ * User-facing provider id: the internal `env-` slot prefix is configuration
+ * plumbing, not something the user declared or should ever see.
+ */
+export function displayProviderId(providerId: string): string {
+  return providerId.startsWith(envProviderSlotPrefix)
+    ? providerId.slice(envProviderSlotPrefix.length)
+    : providerId;
+}
+
+/** User-facing `<provider-id>/<model-id>` reference with the slot prefix stripped. */
+export function displayModelRef(model: string): string {
+  const separator = model.indexOf("/");
+  if (separator <= 0) return model;
+  return `${displayProviderId(model.slice(0, separator))}/${model.slice(separator + 1)}`;
+}
+
+/**
+ * Moves a `model` block that still points at a custom-provider slot
+ * (`env-<id>/...`) over to the signed-in provider's official slot, so a login
+ * takes over the model selection at the next start. Model ids are kept when
+ * the official slot declares them; otherwise the slot's first declared model
+ * is used. Anything not pointing at an `env-` slot is left untouched, as is a
+ * missing official slot. Returns whether the block was rewritten.
+ */
+export async function switchModelBlockToOfficialProvider(
+  officialProviderId: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<boolean> {
+  let switched = false;
+  await updateUserConfig((config) => {
+    const model = config.model as { main?: unknown; lite?: unknown } | undefined;
+    const main = typeof model?.main === "string" ? model.main.trim() : "";
+    if (!main.startsWith(envProviderSlotPrefix)) return;
+    const official = (config.provider as Record<string, { models?: Record<string, unknown> }> | undefined)
+      ?.[officialProviderId];
+    const officialModels = official?.models;
+    if (!officialModels || typeof officialModels !== "object") return;
+
+    const mainId = main.slice(main.indexOf("/") + 1);
+    const mainIdKnown = Object.prototype.hasOwnProperty.call(officialModels, mainId);
+    const firstDeclaredId = Object.keys(officialModels)[0];
+    const nextMainId = mainIdKnown ? mainId : firstDeclaredId;
+    if (!nextMainId) return;
+
+    const lite = typeof model?.lite === "string" ? model.lite.trim() : "";
+    const liteId = lite.startsWith(envProviderSlotPrefix) ? lite.slice(lite.indexOf("/") + 1) : "";
+    const liteIdKnown = liteId !== ""
+      && Object.prototype.hasOwnProperty.call(officialModels, liteId);
+    const nextLiteId = liteIdKnown ? liteId : nextMainId;
+
+    config.model = {
+      main: `${officialProviderId}/${nextMainId}`,
+      lite: `${officialProviderId}/${nextLiteId}`
+    };
+    switched = true;
+  }, env);
+  return switched;
+}
 
 /**
  * Validates env-file values and builds the provider/model config blocks. The
@@ -238,20 +330,29 @@ export function buildProviderConfig(
 
 export interface EnvFileSyncOptions {
   /**
-   * Loopback failover-proxy baseURL. When the env file declares several API
+   * Loopback failover-proxy baseURL. When the file declares several API
    * keys, the provider entry is rewritten to point here with a placeholder
    * key; the proxy itself holds the real keys in memory.
    */
   failoverProxyBaseURL?: string;
+  /**
+   * Signed-in state: refresh the custom-provider slot's data but leave the
+   * `model` block alone — the login's official slot owns the model selection
+   * while signed in, and the block reverts to the custom-provider slot
+   * automatically after a logout.
+   */
+  skipModelBlock?: boolean;
 }
 
 /**
- * Reads `~/.zcode/cli/.env` and, when it declares model settings, syncs them
- * into config.json. The file is the authority for its own provider entry and
- * the `model` block; other providers (for example credentials written by an
- * OAuth login) and every unrelated config block are left untouched. Returns
- * `error` when declared settings fail validation — the caller should stop with
- * that message instead of silently falling back to a stale config.
+ * Reads `~/.zcode/cli/custom-provider.env` and, when it declares model
+ * settings, syncs them into config.json. While signed out the file is the
+ * authority for its own provider entry and the `model` block; other
+ * providers (for example credentials written by an OAuth login) and every
+ * unrelated config block are left untouched. While signed in
+ * (`skipModelBlock`) only the provider entry is refreshed. Returns `error`
+ * when declared settings fail validation — the caller should stop with that
+ * message instead of silently falling back to a stale config.
  */
 export async function syncEnvFileToConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -275,7 +376,7 @@ export async function syncEnvFileToConfig(
   await updateUserConfig((config) => {
     const provider = config.provider as Record<string, unknown> | undefined;
     config.provider = { ...provider, [built.providerId]: built.provider };
-    config.model = { ...built.model };
+    if (!options.skipModelBlock) config.model = { ...built.model };
   }, env);
   return {
     applied: true,

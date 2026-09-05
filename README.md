@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--25-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--26-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 English | [简体中文](README_zh_hans.md) | [繁體中文](README_zh_hant.md)
@@ -29,7 +29,7 @@ redistribute the extracted runtime before publishing a release.
 ## Quick start
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 zcode
 ```
 
@@ -59,9 +59,9 @@ Reopen it anytime with `/setup`; press Esc to skip.
 ## Install and update
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 # or
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 ```
 
 GitHub Releases are the only distribution channel; the project does not
@@ -148,7 +148,7 @@ Account switches are handled automatically, in two layers:
 For BigModel API-key sign-ins there is a per-key alternative that survives
 account switches by design: maintain `~/.zcode/cli/bigmodel-users.json`, a
 flat JSON map of API key → display name owned by the BigModel login channel
-(kept out of the model-access `.env` on purpose):
+(kept out of the custom-provider file on purpose):
 
 ```json
 {
@@ -506,12 +506,15 @@ Coding Plan API key, or a direct API key with a custom provider. For detailed
 setup steps, retries/timeouts, theme, and turn-completion notifications, see
 [Configuration](./docs/CONFIGURATION.md).
 
-As a flat-file alternative, copy the commented `.env.example` template to
-`~/.zcode/cli/.env` and fill in your API key and model IDs: on every start
-zcode syncs that file into config.json before the runtime boots, no login or
-JSON editing required. The synced entry lives in its own `env-<provider-id>`
-slot, so `.env` configuration and `/login` OAuth credentials never overwrite
-each other. Backup keys go into numbered variables
+As a flat-file alternative, copy the commented `custom-provider.env.example`
+template to `~/.zcode/cli/custom-provider.env` and fill in your API key and
+model IDs: no login or JSON editing required. The file serves the signed-out
+state — while you are not logged in, every start syncs it into config.json
+before the runtime boots (the synced entry lives in its own
+`env-<provider-id>` slot), and the identity line shows "Not signed in".
+`/login` takes over the model selection and identity display automatically
+while signed in; `/logout` returns to this file — it never has to be removed
+or restored by hand. Backup keys go into numbered variables
 (`ZCODE_API_KEY_2`, `ZCODE_API_KEY_3`, ... — one key per variable): with more
 than one key zcode runs a loopback failover proxy that
 transparently retries each request with the next key when one is rejected

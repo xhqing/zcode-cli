@@ -66,12 +66,14 @@ Three model-access paths are supported:
   matching masked API-key option;
 - **Direct API key with a custom provider**: use the
   [`config.example.json`](../config.example.json) template — or the flat
-  [`.env` file](#environment-file-env) — and do not log in.
+  [custom-provider file](#custom-provider-file-custom-providerenv) — and do not
+  log in.
 
-When `model.main` already resolves to a configured provider/model with an
-inline API key, plain `zcode login` exits successfully and explains that OAuth
-is unnecessary. This prevents a custom provider from being replaced by an
-unrelated login flow.
+The custom-provider file serves the signed-out state. A plain `zcode login`
+means the user wants to sign in, so it runs even when a custom provider is
+already configured — the file keeps working after the next `/logout`. Only an
+existing login short-circuits the command (use `zcode login --oauth` to force
+a re-login).
 
 ## Usage stats per API key
 
@@ -92,18 +94,22 @@ usage page calls) and appends a real server-side spend report: actual
 deducted credits per model with input / cache / output buckets. A missing
 token or a failed request silently omits the section.
 
-### Environment file (.env)
+### Custom-provider file (custom-provider.env)
 
 Instead of hand-editing the nested `config.json`, keep model settings in a
-single flat file. Copy the commented template from the repository to
-`~/.zcode/cli/.env` (same directory as `config.json`; override the location
-with `ZCODE_ENV_FILE`) and fill in your values:
+single flat file — the way to use zcode without logging in to bigmodel.cn /
+z.ai. Copy the commented template from the repository to
+`~/.zcode/cli/custom-provider.env` (same directory as `config.json`; override
+the location with `ZCODE_ENV_FILE`) and fill in your values:
 
 ```bash
 mkdir -p ~/.zcode/cli
-cp .env.example ~/.zcode/cli/.env
-chmod 600 ~/.zcode/cli/.env
+cp custom-provider.env.example ~/.zcode/cli/custom-provider.env
+chmod 600 ~/.zcode/cli/custom-provider.env
 ```
+
+A legacy `~/.zcode/cli/.env` from older versions is renamed to
+`custom-provider.env` automatically on the first start.
 
 The minimum required content:
 
@@ -112,7 +118,7 @@ ZCODE_API_KEY=your-api-key
 ZCODE_MAIN_MODEL=glm-5.2
 ```
 
-Optional entries (all documented inline in `.env.example`): the provider ID
+Optional entries (all documented inline in `custom-provider.env.example`): the provider ID
 (`ZCODE_PROVIDER_ID`, default `zai` — any lowercase ID works; the synced
 config lives in its own `env-<provider-id>` slot, so it never collides with
 the official `zai`/`bigmodel` slots owned by `/login`; `zai` and `bigmodel`
@@ -122,14 +128,18 @@ protocol (`ZCODE_PROVIDER_KIND`: `anthropic`, `openai`, or
 lightweight/subagent work (`ZCODE_LITE_MODEL`), and extra models for the picker
 (`ZCODE_EXTRA_MODELS`, comma-separated `id` or `id:Display Name` entries).
 
-On every start zcode reads the file and syncs it into `config.json` before the
-runtime boots. The file is the authority for its own `env-<provider-id>`
-provider entry and the `model` block; other providers (for example credentials
-written by an OAuth login) and every unrelated config block are left
-untouched. A file without
-model settings is ignored, an absent file changes nothing, and invalid values
-stop startup with a clear error pointing at the offending entry. Deleting the
-file returns control to `config.json`.
+While signed out, every start reads the file and syncs it into `config.json`
+before the runtime boots: the file is the authority for its own
+`env-<provider-id>` provider entry and the `model` block, and the identity
+line shows "Not signed in" (`zcode identity` reports the provider with the
+`env-` prefix stripped, e.g. `bigmodel/glm-5.2`). Other providers (for example
+credentials written by an OAuth login) and every unrelated config block are
+left untouched. While signed in the sync refreshes only the provider entry —
+the login's official slot owns the model selection and the identity line
+shows the account — and after a `/logout` the file takes over again
+automatically, so it never has to be removed or restored by hand. A file
+without model settings is ignored, an absent file changes nothing, and invalid
+values stop startup with a clear error pointing at the offending entry.
 
 The file holds a live API key: keep it out of every repository and at mode 600.
 
@@ -164,14 +174,14 @@ and error reporting keep working.
 
 Notes:
 
-- The real keys never enter `config.json` or any other file — only the `.env`
-  file and proxy memory hold them.
+- The real keys never enter `config.json` or any other file — only the
+  custom-provider file and proxy memory hold them.
 - The endpoint stays the one declared by `ZCODE_BASE_URL` / the provider
   default; failover only rotates keys, all keys must belong to the same
   endpoint/account family.
 - A single key keeps the direct connection with no proxy involved. Removing
-  the extra variables (or the `.env` file) restores the previous behavior on
-  the next start.
+  the extra variables (or the custom-provider file) restores the previous
+  behavior on the next start.
 - Each variable holds exactly one key; comma-separated lists are not read.
 
 ### Coding Plan API key
@@ -211,7 +221,7 @@ BigModel logins land on an API key whose account name the runtime never
 stores, so the identity display falls back to the masked key. To show a name
 of your choosing instead — one that stays correct across account switches —
 map the keys in `~/.zcode/cli/bigmodel-users.json` (a login-channel file,
-kept out of the model-access `.env`):
+kept out of the custom-provider file):
 
 ```json
 {

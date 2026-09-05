@@ -1,93 +1,30 @@
-import { readFile } from "node:fs/promises";
-
-import { resolveBigmodelUserName } from "../../../src/bigmodel-users.ts";
-import { userConfigPath } from "../../../src/model-access.ts";
-import { credentialsFilePath, decryptCredential, maskApiKey } from "../../../src/usage.ts";
+import { readLoginIdentitySnapshot } from "../../../src/identity.ts";
 
 /** How the active provider authenticates, as shown in the banner and status line. */
 export interface LoginIdentity {
-  kind: "oauth" | "named" | "apiKey";
+  kind: "oauth" | "named" | "apiKey" | "signedOut";
   /** OAuth account name, a key-mapped name, or the masked API key. */
   label: string;
 }
 
-/** OAuth providers whose account name is stored in the credential vault. */
-const oauthProviderIds = new Set(["zai", "bigmodel"]);
-
-const maxLabelWidth = 24;
-
-interface UserConfigShape {
-  model?: { main?: unknown };
-  provider?: Record<string, { options?: { apiKey?: unknown } } | undefined>;
-}
-
-interface StoredUserInfo {
-  username?: unknown;
-  displayName?: unknown;
-}
-
-function identityLabel(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const label = value.trim().slice(0, maxLabelWidth);
-  return label || undefined;
-}
-
 /**
- * Resolves the signed-in identity behind the active provider: the OAuth account
- * name from the encrypted `oauth:<provider>:user_info` credential wins, then
- * (for the BigModel provider) a name mapped to the API key in
- * `~/.zcode/cli/bigmodel-users.json`, and the masked API key is only shown when
- * neither is available. Order matters: the runtime's OAuth flow exchanges the
- * access token for an API key and writes it into `provider.options.apiKey`
- * (reverse-engineered from the vendor bundle), so an explicit key alongside a
- * stored login is the login's own artifact — the user is still signed in as
- * that account. Returns undefined when neither is available — the login wizard
- * warning covers that state, so nothing identity-like should be displayed.
+ * Delegates to `src/identity.ts` — one implementation, no mirror drift. The
+ * stored OAuth login is the primary signal, so a `/login` round-trip is
+ * reflected immediately even while a custom-provider file still configures
+ * the model; without a login the identity is "not signed in" whenever model
+ * access exists, and undefined when nothing is configured (the login wizard
+ * warning covers that state).
  */
 export async function readLoginIdentity(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<LoginIdentity | undefined> {
-  let config: UserConfigShape;
-  try {
-    config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfigShape;
-  } catch {
-    return undefined;
-  }
-  const model = typeof config.model?.main === "string" ? config.model.main.trim() : "";
-  const separator = model.indexOf("/");
-  if (separator <= 0) return undefined;
-  const providerId = model.slice(0, separator);
-  const provider = config.provider?.[providerId];
-  if (!provider) return undefined;
-
-  if (oauthProviderIds.has(providerId)) {
-    try {
-      const credentials = JSON.parse(
-        await readFile(credentialsFilePath(env), "utf8")
-      ) as Record<string, string>;
-      const stored = credentials[`oauth:${providerId}:user_info`];
-      if (typeof stored === "string" && stored) {
-        const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
-        const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
-        if (label) return { kind: "oauth", label };
-      }
-    } catch {
-      // Missing vault entry or unreadable credential: fall through to the key.
-    }
-  }
-
-  const apiKey = typeof provider.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
-  if (apiKey) {
-    if (providerId === "bigmodel") {
-      const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
-      if (label) return { kind: "named", label };
-    }
-    return { kind: "apiKey", label: maskApiKey(apiKey) };
-  }
-  return undefined;
+  const snapshot = await readLoginIdentitySnapshot(env).catch(() => undefined);
+  if (!snapshot) return undefined;
+  return { kind: snapshot.kind, label: snapshot.label };
 }
 
-/** Banner text for the identity line, e.g. "Signed in as alice" or "API key 916c…e2f1". */
+/** Banner text for the identity line, e.g. "Signed in as alice", "API key 916c…e2f1" or "Not signed in". */
 export function loginIdentityText(identity: LoginIdentity): string {
+  if (identity.kind === "signedOut") return "Not signed in";
   return identity.kind === "apiKey" ? `API key ${identity.label}` : `Signed in as ${identity.label}`;
 }

@@ -2,11 +2,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { Writable } from "node:stream";
 
 import { bigmodelUsersPath, resolveBigmodelUserName } from "./bigmodel-users.ts";
+import { displayProviderId } from "./env-config.ts";
 import { userConfigPath } from "./model-access.ts";
 import { credentialsFilePath, decryptCredential, encryptCredential, maskApiKey } from "./usage.ts";
 
 /** OAuth providers whose account name lives in the credential vault. */
 const oauthProviderIds = new Set(["zai", "bigmodel"]);
+
+export type OAuthProviderId = "zai" | "bigmodel";
 
 const maxLabelWidth = 24;
 const maxNameLength = 64;
@@ -61,50 +64,103 @@ async function activeProviderId(env: NodeJS.ProcessEnv): Promise<string> {
   return "bigmodel";
 }
 
+/**
+ * The provider with a stored OAuth login, if any. The vault marker (when it
+ * names a provider that also has an access token) wins; otherwise a scan for
+ * either provider's access token. Presence of a token is the login signal —
+ * expiry/refusal is the runtime's business, not ours.
+ */
+export async function readStoredOAuthLogin(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<OAuthProviderId | undefined> {
+  let vault: CredentialVault;
+  try {
+    vault = await readVault(env);
+  } catch {
+    return undefined;
+  }
+  const hasToken = (provider: string): boolean => {
+    const token = vault[`oauth:${provider}:access_token`];
+    return typeof token === "string" && token.length > 0;
+  };
+  try {
+    const marker = vault["oauth:active_provider"];
+    if (typeof marker === "string" && marker) {
+      const provider = decryptCredential(marker, env).trim();
+      if ((provider === "zai" || provider === "bigmodel") && hasToken(provider)) return provider;
+    }
+  } catch {
+    // Unreadable marker: fall through to the plain token scan.
+  }
+  for (const provider of ["zai", "bigmodel"] as const) {
+    if (hasToken(provider)) return provider;
+  }
+  return undefined;
+}
+
 export interface LoginIdentitySnapshot {
+  /** Display-facing provider id: the `env-` slot prefix is already stripped. */
   providerId: string;
-  kind: "oauth" | "named" | "apiKey";
+  kind: "oauth" | "named" | "apiKey" | "signedOut";
   label: string;
 }
 
 /**
- * Resolves the sign-in identity the TUI banner/status line shows. Mirrors the
- * lookup order of `packages/zcode-tui/src/login-identity.ts` (duplicated here
- * because the TUI package depends on `src/`, not the other way around).
- * A BigModel API key mapped in `~/.zcode/cli/bigmodel-users.json` resolves to
- * kind "named" with the mapped display name, before the masked-key fallback.
+ * Resolves the sign-in identity the TUI banner/status line and `zcode identity`
+ * show. The stored OAuth login is the primary signal: a signed-in user is
+ * identified by the account-name snapshot, then (BigModel) the key-mapped
+ * name, then the masked API key — regardless of which provider entry
+ * `model.main` currently points at, so a `/login` round-trip is reflected
+ * immediately even while a custom-provider file still configures the model.
+ * Without a login the identity is "not signed in" whenever any model access
+ * exists (custom-provider file or hand-edited config); with no access at all
+ * the login wizard warning covers the state and undefined is returned.
  */
 export async function readLoginIdentitySnapshot(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<LoginIdentitySnapshot | undefined> {
-  const providerId = await activeProviderId(env);
-  const config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfigShape;
-  const provider = config.provider?.[providerId];
-  if (!provider) return undefined;
+  const signedInProvider = await readStoredOAuthLogin(env);
 
-  if (oauthProviderIds.has(providerId)) {
+  let config: UserConfigShape | undefined;
+  try {
+    config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfigShape;
+  } catch {
+    config = undefined;
+  }
+
+  if (signedInProvider) {
+    const provider = config?.provider?.[signedInProvider];
     try {
       const vault = await readVault(env);
-      const stored = vault[`oauth:${providerId}:user_info`];
+      const stored = vault[`oauth:${signedInProvider}:user_info`];
       if (typeof stored === "string" && stored) {
         const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
         const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
-        if (label) return { providerId, kind: "oauth", label };
+        if (label) return { providerId: signedInProvider, kind: "oauth", label };
       }
     } catch {
       // Missing vault entry or unreadable credential: fall through to the key.
     }
+    const apiKey = typeof provider?.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
+    if (apiKey) {
+      if (signedInProvider === "bigmodel") {
+        const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
+        if (label) return { providerId: signedInProvider, kind: "named", label };
+      }
+      return { providerId: signedInProvider, kind: "apiKey", label: maskApiKey(apiKey) };
+    }
+    // Logged in but no exchanged key in the config slot: still signed in —
+    // fall back to the provider name rather than the "not signed in" state.
+    return { providerId: signedInProvider, kind: "oauth", label: displayProviderId(signedInProvider) };
   }
 
-  const apiKey = typeof provider.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
-  if (apiKey) {
-    if (providerId === "bigmodel") {
-      const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
-      if (label) return { providerId, kind: "named", label };
-    }
-    return { providerId, kind: "apiKey", label: maskApiKey(apiKey) };
-  }
-  return undefined;
+  // Not signed in: show the state itself whenever model access exists.
+  const model = typeof config?.model?.main === "string" ? config.model.main.trim() : "";
+  const separator = model.indexOf("/");
+  const provider = separator > 0 ? config?.provider?.[model.slice(0, separator)] : undefined;
+  const apiKey = typeof provider?.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
+  if (!apiKey) return undefined;
+  return { providerId: displayProviderId(model.slice(0, separator)), kind: "signedOut", label: "" };
 }
 
 export interface BigModelKeyNameHint {
@@ -294,12 +350,17 @@ export async function runIdentityCommand(options: {
 
   const identity = await readLoginIdentitySnapshot(env).catch(() => undefined);
   if (!identity) {
-    write("No sign-in identity found for the active provider.");
-    write("Log in via `zcode login`, then check again with `zcode identity`.");
+    write("No model access configured.");
+    write("Log in via `zcode login`, or set up a custom provider in ~/.zcode/cli/custom-provider.env.");
     return 0;
   }
   write(`Provider: ${identity.providerId}`);
-  write(`Identity: ${identity.kind === "apiKey" ? `API key ${identity.label}` : `signed in as ${identity.label}`}`);
+  if (identity.kind === "signedOut") {
+    write("Identity: not signed in (model access via custom provider)");
+    write("Log in via `zcode login` to switch the identity display to the account.");
+  } else {
+    write(`Identity: ${identity.kind === "apiKey" ? `API key ${identity.label}` : `signed in as ${identity.label}`}`);
+  }
   if (identity.providerId === "bigmodel" && identity.kind === "apiKey") {
     write(
       `Tip: label this API key by adding {"<api-key>": "<name>"} to ${bigmodelUsersPath(env)} `
@@ -312,6 +373,10 @@ export async function runIdentityCommand(options: {
 async function setIdentityName(name: string, env: NodeJS.ProcessEnv, write: (line: string) => void): Promise<number> {
   if (name.length > maxNameLength) {
     write(`Error: the display name must be at most ${maxNameLength} characters.`);
+    return 1;
+  }
+  if (!(await readStoredOAuthLogin(env))) {
+    write("Error: not signed in; run `zcode login` first — the display name follows the signed-in account.");
     return 1;
   }
   const providerId = await activeProviderId(env);

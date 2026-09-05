@@ -5,9 +5,13 @@ import { dirname, join } from "node:path";
 
 import {
   buildProviderConfig,
+  displayModelRef,
+  displayProviderId,
   envFilePath,
+  migrateLegacyEnvFile,
   parseEnvFileContent,
   resolveUpstreamBaseURL,
+  switchModelBlockToOfficialProvider,
   syncEnvFileToConfig
 } from "../src/env-config.ts";
 import { placeholderApiKey } from "../src/key-failover.ts";
@@ -42,13 +46,53 @@ const completeEnvFile = [
 
 describe("env file path", () => {
   test("resolves the default location and honors ZCODE_ENV_FILE", () => {
-    expect(envFilePath({ HOME: "/home/alice" }, "linux", "/fallback")).toBe("/home/alice/.zcode/cli/.env");
+    expect(envFilePath({ HOME: "/home/alice" }, "linux", "/fallback")).toBe("/home/alice/.zcode/cli/custom-provider.env");
     expect(envFilePath({ USERPROFILE: "C:\\Users\\Alice" }, "win32", "C:\\fallback")).toBe(
-      "C:\\Users\\Alice\\.zcode\\cli\\.env"
+      "C:\\Users\\Alice\\.zcode\\cli\\custom-provider.env"
     );
     expect(envFilePath({ HOME: "/home/alice", ZCODE_ENV_FILE: "/custom/zcode.env" }, "linux")).toBe(
       "/custom/zcode.env"
     );
+  });
+});
+
+describe("display ids", () => {
+  test("strips the env- slot prefix from provider ids and model refs", () => {
+    expect(displayProviderId("env-bigmodel")).toBe("bigmodel");
+    expect(displayProviderId("bigmodel")).toBe("bigmodel");
+    expect(displayProviderId("env-custom")).toBe("custom");
+    expect(displayModelRef("env-bigmodel/glm-5.3")).toBe("bigmodel/glm-5.3");
+    expect(displayModelRef("zai/glm-5.3")).toBe("zai/glm-5.3");
+    expect(displayModelRef("bare-model")).toBe("bare-model");
+  });
+});
+
+describe("migrateLegacyEnvFile", () => {
+  test("renames the legacy .env once and leaves existing files alone", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const directory = dirname(envFilePath(env));
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, ".env"), completeEnvFile);
+
+    const migrated = await migrateLegacyEnvFile(env);
+    expect(migrated).toBe(envFilePath(env));
+    await expect(readFile(join(directory, ".env"))).rejects.toThrow();
+    expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+
+    // A second run is a no-op now that the new name exists.
+    expect(await migrateLegacyEnvFile(env)).toBeUndefined();
+    expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+  });
+
+  test("does nothing without a legacy file and with an explicit override", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    await mkdir(dirname(envFilePath(env)), { recursive: true });
+    expect(await migrateLegacyEnvFile(env)).toBeUndefined();
+
+    await writeFile(join(dirname(envFilePath(env)), ".env"), completeEnvFile);
+    expect(await migrateLegacyEnvFile({ ...env, ZCODE_ENV_FILE: "/custom/override.env" })).toBeUndefined();
   });
 });
 
@@ -284,5 +328,88 @@ describe("syncEnvFileToConfig", () => {
     const result = await syncEnvFileToConfig(env);
     expect(result.applied).toBe(false);
     expect(result.error).toBeUndefined();
+  });
+
+  test("skipModelBlock refreshes the provider slot but leaves the model block alone", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const configDirectory = dirname(userConfigPath(env));
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(userConfigPath(env), JSON.stringify({
+      provider: { bigmodel: { options: { apiKey: "oauth-key" }, models: { "glm-5.2": { name: "GLM-5.2" } } } },
+      model: { main: "bigmodel/glm-5.2", lite: "bigmodel/glm-5-turbo" }
+    }));
+    await writeFile(envFilePath(env), completeEnvFile);
+
+    const result = await syncEnvFileToConfig(env, { skipModelBlock: true });
+    expect(result.applied).toBe(true);
+
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
+    // The custom-provider slot is refreshed, but the login's model block survives.
+    expect(config.provider["env-bigmodel"].options.apiKey).toBe("test-key");
+    expect(config.model).toEqual({ main: "bigmodel/glm-5.2", lite: "bigmodel/glm-5-turbo" });
+  });
+});
+
+describe("switchModelBlockToOfficialProvider", () => {
+  test("moves a leftover env- model block to the official slot, keeping known model ids", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const configDirectory = dirname(userConfigPath(env));
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(userConfigPath(env), JSON.stringify({
+      provider: {
+        bigmodel: { options: { apiKey: "oauth-key" }, models: { "glm-5.3": {}, "glm-5-turbo": {} } },
+        "env-bigmodel": { options: { apiKey: "test-key" }, models: { "glm-5.3": {}, "glm-5-turbo": {} } }
+      },
+      model: { main: "env-bigmodel/glm-5.3", lite: "env-bigmodel/glm-5-turbo" }
+    }));
+
+    expect(await switchModelBlockToOfficialProvider("bigmodel", env)).toBe(true);
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
+    expect(config.model).toEqual({ main: "bigmodel/glm-5.3", lite: "bigmodel/glm-5-turbo" });
+    // Both provider entries stay as they were.
+    expect(config.provider["env-bigmodel"].options.apiKey).toBe("test-key");
+    expect(config.provider.bigmodel.options.apiKey).toBe("oauth-key");
+  });
+
+  test("falls back to the first declared official model for unknown ids and other providers", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const configDirectory = dirname(userConfigPath(env));
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(userConfigPath(env), JSON.stringify({
+      provider: {
+        bigmodel: { options: { apiKey: "oauth-key" }, models: { "glm-5.2": {}, "glm-5.3": {} } },
+        "env-deepseek": { options: { apiKey: "test-key" }, models: { "deepseek-chat": {} } }
+      },
+      model: { main: "env-deepseek/deepseek-chat", lite: "env-deepseek/deepseek-chat" }
+    }));
+
+    expect(await switchModelBlockToOfficialProvider("bigmodel", env)).toBe(true);
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
+    expect(config.model).toEqual({ main: "bigmodel/glm-5.2", lite: "bigmodel/glm-5.2" });
+  });
+
+  test("leaves non-env model blocks and missing official slots untouched", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const configDirectory = dirname(userConfigPath(env));
+    await mkdir(configDirectory, { recursive: true });
+    const officialBlock = {
+      provider: { bigmodel: { options: { apiKey: "oauth-key" }, models: { "glm-5.2": {} } } },
+      model: { main: "bigmodel/glm-5.2", lite: "bigmodel/glm-5.2" }
+    };
+    await writeFile(userConfigPath(env), JSON.stringify(officialBlock));
+    expect(await switchModelBlockToOfficialProvider("bigmodel", env)).toBe(false);
+    expect(JSON.parse(await readFile(userConfigPath(env), "utf8"))).toEqual(officialBlock);
+
+    const envBlockWithoutOfficial = {
+      provider: { "env-bigmodel": { options: { apiKey: "test-key" }, models: { "glm-5.3": {} } } },
+      model: { main: "env-bigmodel/glm-5.3", lite: "env-bigmodel/glm-5.3" }
+    };
+    await writeFile(userConfigPath(env), JSON.stringify(envBlockWithoutOfficial));
+    expect(await switchModelBlockToOfficialProvider("bigmodel", env)).toBe(false);
+    expect(JSON.parse(await readFile(userConfigPath(env), "utf8"))).toEqual(envBlockWithoutOfficial);
   });
 });

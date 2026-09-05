@@ -20,6 +20,7 @@ import {
   readBigModelKeyNameHint,
   readLoginIdentitySnapshot,
   readProviderApiKeySnapshot,
+  readStoredOAuthLogin,
   runIdentityCommand,
   runLogoutCommand
 } from "../src/identity.ts";
@@ -65,6 +66,11 @@ function encryptedUserInfo(userInfo: unknown): string {
   return encryptCredential(JSON.stringify(userInfo), secretEnv);
 }
 
+/** Vault entries of a stored BigModel OAuth login, with optional extras. */
+function bigmodelLogin(extra: Record<string, string> = {}): Record<string, string> {
+  return { "oauth:bigmodel:access_token": "enc:v1:bm-token", ...extra };
+}
+
 describe("credential encryption round trip", () => {
   test("encryptCredential inverts decryptCredential", () => {
     const plain = JSON.stringify({ username: "alice", displayName: "alice" });
@@ -94,9 +100,53 @@ describe("identity invocation", () => {
   });
 });
 
+describe("stored OAuth login detection", () => {
+  test("the marker names the provider when its access token exists", async () => {
+    const fx = await createFixture({
+      "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
+      "oauth:bigmodel:access_token": "enc:v1:bm-token"
+    });
+    try {
+      expect(await readStoredOAuthLogin(fx.env)).toBe("bigmodel");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("a marker without its token falls through to the token scan", async () => {
+    const fx = await createFixture({
+      "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
+      "oauth:zai:access_token": "enc:v1:zai-token"
+    });
+    try {
+      expect(await readStoredOAuthLogin(fx.env)).toBe("zai");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("no vault or no tokens means no login", async () => {
+    const noVault = await createFixture({}, { provider: {} });
+    try {
+      expect(await readStoredOAuthLogin(noVault.env)).toBeUndefined();
+    } finally {
+      await noVault.cleanup();
+    }
+    const infoOnly = await createFixture({
+      "oauth:bigmodel:user_info": encryptedUserInfo({ username: "name" })
+    });
+    try {
+      // A user_info snapshot alone is not a login — only a token is.
+      expect(await readStoredOAuthLogin(infoOnly.env)).toBeUndefined();
+    } finally {
+      await infoOnly.cleanup();
+    }
+  });
+});
+
 describe("login identity snapshot", () => {
   test("prefers the stored OAuth user_info over the API key", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
       "oauth:bigmodel:user_info": encryptedUserInfo({
         id: "65241782030085862",
@@ -104,7 +154,7 @@ describe("login identity snapshot", () => {
         displayName: "old-name",
         avatarUrl: "https://cdn.bigmodel.cn/blob"
       })
-    });
+    }));
     try {
       const identity = await readLoginIdentitySnapshot(fx.env);
       expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "old-name" });
@@ -114,7 +164,7 @@ describe("login identity snapshot", () => {
   });
 
   test("falls back to the masked API key without a stored user_info", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       const identity = await readLoginIdentitySnapshot(fx.env);
       expect(identity?.kind).toBe("apiKey");
@@ -124,13 +174,53 @@ describe("login identity snapshot", () => {
     }
   });
 
-  test("resolves the provider from the main model when the vault marker is absent", async () => {
-    const fx = await createFixture({
-      "oauth:bigmodel:user_info": encryptedUserInfo({ username: "from-model-main" })
+  test("resolves the provider from the token scan when the vault marker is absent", async () => {
+    const fx = await createFixture(bigmodelLogin({
+      "oauth:bigmodel:user_info": encryptedUserInfo({ username: "from-token-scan" })
+    }));
+    try {
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "from-token-scan" });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("without a login the identity is signed out, with the env- slot prefix stripped", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3", lite: "env-bigmodel/glm-5-turbo" },
+      provider: { "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
     });
     try {
       const identity = await readLoginIdentitySnapshot(fx.env);
-      expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "from-model-main" });
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "signedOut", label: "" });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("without a login and without model access there is no identity at all", async () => {
+    const fx = await createFixture({}, { provider: {} });
+    try {
+      expect(await readLoginIdentitySnapshot(fx.env)).toBeUndefined();
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("a signed-in login wins even while model.main points at the custom-provider slot", async () => {
+    const fx = await createFixture(bigmodelLogin({
+      "oauth:bigmodel:user_info": encryptedUserInfo({ username: "live-account" })
+    }), {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: {
+        bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } },
+        "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } }
+      }
+    });
+    try {
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "live-account" });
     } finally {
       await fx.cleanup();
     }
@@ -144,7 +234,7 @@ function maskedKey(): string {
 
 describe("bigmodel key display names", () => {
   test("a mapped key resolves to kind named with the account name", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "工作账号" }));
       const identity = await readLoginIdentitySnapshot(fx.env);
@@ -155,9 +245,9 @@ describe("bigmodel key display names", () => {
   });
 
   test("the stored OAuth user_info still wins over the mapping", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "oauth-name" })
-    });
+    }));
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "mapped-name" }));
       const identity = await readLoginIdentitySnapshot(fx.env);
@@ -168,7 +258,7 @@ describe("bigmodel key display names", () => {
   });
 
   test("the mapping is scoped to the bigmodel provider", async () => {
-    const fx = await createFixture({}, {
+    const fx = await createFixture({ "oauth:zai:access_token": "enc:v1:zai-token" }, {
       model: { main: "zai/glm-5.3" },
       provider: { zai: { options: { apiKey: "916cee0123456789abcdefVM9e" } } }
     });
@@ -205,7 +295,7 @@ describe("bigmodel key display names", () => {
   });
 
   test("readBigModelKeyNameHint reports an unmapped bigmodel key", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       const hint = await readBigModelKeyNameHint(fx.env);
       expect(hint).toEqual({ apiKeyMasked: maskedKey(), usersPath: bigmodelUsersPath(fx.env) });
@@ -215,7 +305,7 @@ describe("bigmodel key display names", () => {
   });
 
   test("readBigModelKeyNameHint stays silent for mapped keys, other providers and missing access", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "named" }));
       expect(await readBigModelKeyNameHint(fx.env)).toBeUndefined();
@@ -223,7 +313,7 @@ describe("bigmodel key display names", () => {
       await fx.cleanup();
     }
 
-    const zai = await createFixture({}, {
+    const zai = await createFixture({ "oauth:zai:access_token": "enc:v1:zai-token" }, {
       model: { main: "zai/glm-5.3" },
       provider: { zai: { options: { apiKey: "916cee0123456789abcdefVM9e" } } }
     });
@@ -241,8 +331,20 @@ describe("bigmodel key display names", () => {
     }
   });
 
+  test("readBigModelKeyNameHint stays silent while signed out on a custom provider", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: { "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      expect(await readBigModelKeyNameHint(fx.env)).toBeUndefined();
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
   test("zcode identity prints the mapping tip for an unnamed bigmodel key", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -255,7 +357,7 @@ describe("bigmodel key display names", () => {
   });
 
   test("zcode identity shows the mapped name without a tip", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "工作账号" }));
       const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
@@ -266,11 +368,26 @@ describe("bigmodel key display names", () => {
       await fx.cleanup();
     }
   });
+
+  test("zcode identity reports the signed-out state with the custom provider", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: { "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
+      expect(code).toBe(0);
+      expect(fx.output.text()).toContain("Provider: bigmodel");
+      expect(fx.output.text()).toContain("Identity: not signed in");
+    } finally {
+      await fx.cleanup();
+    }
+  });
 });
 
 describe("zcode identity set", () => {
   test("rewrites username and displayName while preserving other fields", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
       "oauth:bigmodel:user_info": encryptedUserInfo({
         id: "65241782030085862",
@@ -279,7 +396,7 @@ describe("zcode identity set", () => {
         avatarUrl: "https://cdn.bigmodel.cn/blob"
       }),
       "oauth:login_attribution": encryptCredential(JSON.stringify({ utm_source: "maas" }), secretEnv)
-    });
+    }));
     try {
       const code = await runIdentityCommand({ args: ["identity", "set", "new-name"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -302,7 +419,7 @@ describe("zcode identity set", () => {
   });
 
   test("creates the user_info entry when only an API key exists", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       const code = await runIdentityCommand({ args: ["identity", "set", "fresh-name"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -313,8 +430,19 @@ describe("zcode identity set", () => {
     }
   });
 
+  test("rejects a rename while signed out", async () => {
+    const fx = await createFixture();
+    try {
+      const code = await runIdentityCommand({ args: ["identity", "set", "alice"], env: fx.env, output: fx.output });
+      expect(code).toBe(1);
+      expect(fx.output.text()).toContain("not signed in");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
   test("rejects providers without an OAuth identity and overlong names", async () => {
-    const fx = await createFixture({}, {
+    const fx = await createFixture(bigmodelLogin(), {
       model: { main: "custom/glm-5.3" },
       provider: { custom: { options: { apiKey: "abcd1234efgh5678" } } }
     });
@@ -326,7 +454,7 @@ describe("zcode identity set", () => {
       await fx.cleanup();
     }
 
-    const fx2 = await createFixture();
+    const fx2 = await createFixture(bigmodelLogin());
     try {
       const code = await runIdentityCommand({
         args: ["identity", "set", "x".repeat(65)],
@@ -343,10 +471,10 @@ describe("zcode identity set", () => {
 
 describe("zcode identity show and clear", () => {
   test("shows the OAuth account name", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "shown-name", displayName: "shown-name" })
-    });
+    }));
     try {
       const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -358,10 +486,10 @@ describe("zcode identity show and clear", () => {
   });
 
   test("clear removes the snapshot and the identity falls back to the API key", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "bye-name", displayName: "bye-name" })
-    });
+    }));
     try {
       const code = await runIdentityCommand({ args: ["identity", "clear"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -377,7 +505,7 @@ describe("zcode identity show and clear", () => {
   });
 
   test("clear is a no-op without a stored snapshot", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture(bigmodelLogin());
     try {
       const code = await runIdentityCommand({ args: ["identity", "clear"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
@@ -392,7 +520,7 @@ describe("zcode identity show and clear", () => {
     try {
       const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
-      expect(fx.output.text()).toContain("No sign-in identity found");
+      expect(fx.output.text()).toContain("No model access configured");
     } finally {
       await fx.cleanup();
     }
@@ -420,11 +548,11 @@ describe("stale identity sweep after login", () => {
   });
 
   test("clearIdentitiesWithChangedKeys drops the snapshot when the key changed", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:active_provider": encryptCredential("bigmodel", secretEnv),
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "old-account" }),
       "oauth:login_attribution": encryptCredential(JSON.stringify({ utm_source: "maas" }), secretEnv)
-    });
+    }));
     try {
       const before = await readProviderApiKeySnapshot(fx.env);
       const newKey = "f105cc1234567890abcdefWN0f";
@@ -453,9 +581,9 @@ describe("stale identity sweep after login", () => {
   });
 
   test("keeps the snapshot when the key is unchanged (same-account re-login)", async () => {
-    const fx = await createFixture({
+    const fx = await createFixture(bigmodelLogin({
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "same-account" })
-    });
+    }));
     try {
       const before = await readProviderApiKeySnapshot(fx.env);
       const cleared = await clearIdentitiesWithChangedKeys(before, fx.env);

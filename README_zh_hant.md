@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--25-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--26-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 [English](README.md) | [简体中文](README_zh_hans.md) | 繁體中文
@@ -26,7 +26,7 @@
 ## 快速開始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安裝與更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
 ```
 
 GitHub Release 是唯一的分發渠道，本項目不發布到 npm。包名為
@@ -129,7 +129,7 @@ displayName（保留 id / 頭像等其餘字段與憑證庫相鄰條目），新
 
 針對 BigModel API key 登錄，還有一種按 key 歸屬、天然免疫帳號切換的
 方式：維護 `~/.zcode/cli/bigmodel-users.json`——BigModel 登錄通道專屬的
-平鋪 JSON 映射表（API key → 顯示名，有意不放進模型訪問的 `.env`）：
+平鋪 JSON 映射表（API key → 顯示名，有意不放進 custom-provider 文件）：
 
 ```json
 {
@@ -419,13 +419,15 @@ ZCode 從 `~/.zcode/cli/config.json`（Windows 上為
 API key、或帶自定義 provider 的直連 API key。詳細的設置步驟、重試 / 超時、主題
 與回合完成通知見[配置文檔](./docs/CONFIGURATION.md)。
 
-另有扁平文件方式：把帶註釋的 `.env.example` 模板複製為 `~/.zcode/cli/.env`
-並填入 API key 與模型 ID——每次啟動時 zcode 會先把它同步進 config.json 再拉起
-runtime，無需登錄或手改 JSON。同步結果寫入獨立的 `env-<provider-id>` 槽位，
-`.env` 配置與 `/login` OAuth 憑證互不覆蓋。備用 key 用編號變量（`ZCODE_API_KEY_2`、
-`ZCODE_API_KEY_3`……每變量一把 key）：多於一把時 zcode 會啟用本地回環容災代理，
-某把 key 的請求被拒（401/403/429、5xx、連接失敗）時自動換下一把重試，詳見
-[配置文檔](./docs/CONFIGURATION.md)。
+另有扁平文件方式：把帶註釋的 `custom-provider.env.example` 模板複製為
+`~/.zcode/cli/custom-provider.env` 並填入 API key 與模型 ID——無需登錄或手改
+JSON。該文件專門服務**未登錄**場景：未登錄時每次啟動先把它同步進 config.json
+再拉起 runtime（同步結果寫入獨立的 `env-<provider-id>` 槽位），身份欄顯示
+「Not signed in」；`/login` 登錄後模型選擇與身份顯示自動切到登錄賬號，
+`/logout` 登出後又自動回到這份文件——全程無需手動刪除或恢復。備用 key 用編號
+變量（`ZCODE_API_KEY_2`、`ZCODE_API_KEY_3`……每變量一把 key）：多於一把時
+zcode 會啟用本地回環容災代理，某把 key 的請求被拒（401/403/429、5xx、
+連接失敗）時自動換下一把重試，詳見[配置文檔](./docs/CONFIGURATION.md)。
 
 ## 本地開發
 

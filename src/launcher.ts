@@ -20,7 +20,13 @@ import {
   readConfiguredModelAccess,
   readSetupPending
 } from "./model-access.ts";
-import { readEnvFile, resolveUpstreamBaseURL, syncEnvFileToConfig } from "./env-config.ts";
+import {
+  migrateLegacyEnvFile,
+  readEnvFile,
+  resolveUpstreamBaseURL,
+  switchModelBlockToOfficialProvider,
+  syncEnvFileToConfig
+} from "./env-config.ts";
 import { collectApiKeys, startKeyFailoverProxy, type KeyFailoverProxy } from "./key-failover.ts";
 import {
   classifyZaiOAuthInvocation,
@@ -34,6 +40,8 @@ import {
   isIdentityInvocation,
   isLogoutInvocation,
   printBigModelKeyNameHint,
+  readLoginIdentitySnapshot,
+  readStoredOAuthLogin,
   runIdentityCommand,
   runLogoutCommand
 } from "./identity.ts";
@@ -463,14 +471,22 @@ export async function main(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Sync ~/.zcode/cli/.env into config.json before anything reads model
-  // settings: the login check below and the runtime both see the result.
-  // More than one key variable (ZCODE_API_KEY plus ZCODE_API_KEY_2, ...)
-  // activates the loopback failover proxy first — its port must be known
-  // before the provider block (rewritten to point at the proxy) lands in
-  // config.json.
+  // Sync ~/.zcode/cli/custom-provider.env into config.json before anything
+  // reads model settings: the login check below and the runtime both see the
+  // result. While signed out the file owns the `model` block; while signed in
+  // it only refreshes its own provider slot and the login's official slot
+  // keeps the model selection (a leftover `env-` model block is moved over to
+  // the official slot). More than one key variable (ZCODE_API_KEY plus
+  // ZCODE_API_KEY_2, ...) activates the loopback failover proxy first — its
+  // port must be known before the provider block (rewritten to point at the
+  // proxy) lands in config.json.
   let failoverProxy: KeyFailoverProxy | undefined;
   try {
+    const migratedEnvFile = await migrateLegacyEnvFile().catch(() => undefined);
+    if (migratedEnvFile) {
+      console.log(`Renamed ~/.zcode/cli/.env to ${migratedEnvFile} (custom-provider configuration).`);
+    }
+    const signedInProvider = await readStoredOAuthLogin();
     const envFile = await readEnvFile();
     const apiKeys = collectApiKeys(envFile?.values ?? {});
     const upstreamBaseURL = envFile ? resolveUpstreamBaseURL(envFile.values) : undefined;
@@ -478,7 +494,8 @@ export async function main(args: string[]): Promise<number> {
       failoverProxy = await startKeyFailoverProxy({ upstreamBaseURL, keys: apiKeys });
     }
     const envSync = await syncEnvFileToConfig(undefined, {
-      ...(failoverProxy ? { failoverProxyBaseURL: failoverProxy.baseURL } : {})
+      ...(failoverProxy ? { failoverProxyBaseURL: failoverProxy.baseURL } : {}),
+      ...(signedInProvider ? { skipModelBlock: true } : {})
     });
     if (envSync.error) {
       console.error(
@@ -487,7 +504,12 @@ export async function main(args: string[]): Promise<number> {
       );
       return 1;
     }
-    if (envSync.applied) setupPending = false;
+    if (signedInProvider) {
+      await switchModelBlockToOfficialProvider(signedInProvider).catch(() => {});
+      setupPending = false;
+    } else if (envSync.applied) {
+      setupPending = false;
+    }
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
@@ -523,12 +545,19 @@ export async function main(args: string[]): Promise<number> {
   const login = normalizeLoginArgs(args);
   const zaiOAuth = classifyZaiOAuthInvocation(args);
   if (login.checkConfiguredAccess) {
-    const access = await readConfiguredModelAccess();
-    if (access) {
+    // A plain `zcode login` means the user wants to sign in — a custom
+    // provider being configured is no reason to refuse (it serves the
+    // signed-out state and keeps working after the next logout). Only an
+    // existing login short-circuits the command.
+    const signedIn = await readStoredOAuthLogin();
+    if (signedIn) {
+      const identity = await readLoginIdentitySnapshot().catch(() => undefined);
+      const label = identity && identity.kind !== "signedOut" && identity.label
+        ? ` as ${identity.label}`
+        : "";
       console.log(
-        `Model access is already configured for ${access.model}; OAuth login is not required.\n`
-        + `Config: ${access.configPath}\n`
-        + "Run `zcode login --oauth` to force Z.AI OAuth."
+        `Already signed in${label} (${signedIn}).\n`
+        + "Run `zcode login --oauth` to force a re-login."
       );
       return 0;
     }

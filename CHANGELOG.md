@@ -2,6 +2,17 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-26 - 2026-09-05
+
+### 变更
+
+- **登录态成为一等公民：`/login` 授权后立即切换身份与模型显示，custom-provider 文件重新定位为「未登录场景专属」并全程自动衔接**（src/identity.ts、src/env-config.ts、src/launcher.ts、packages/zcode-tui/src/login-identity.ts、packages/zcode-tui/src/index.ts、test/identity.test.ts、test/login-identity.test.ts、test/env-config.test.ts、README.md、README_zh_hans.md、README_zh_hant.md、docs/CONFIGURATION.md、`.env.example` 改名 `custom-provider.env.example`）。
+  - 为什么改：用户在 TUI 执行 `/login` 并完成浏览器 OAuth 授权后，横幅仍显示 custom-provider 文件的脱敏 API key——登录明明成功了却看不到任何反馈。根因是 3.8.1-25 的解耦设计里身份显示跟着 `model.main` 前缀走，而该前缀被 custom-provider 文件每次启动钉在 `env-<id>` 槽位上，OAuth 写入的官方槽位与凭据库永远轮不到显示；且按旧设计「想显示登录账号须手动删除文件、登出后再手动配回」，产品上不可用。用户裁定产品原则：**用户有动作就要有正确反馈**——登录后常驻信息应切换为登录账号并显示已登录，未登录则显示未登录；custom-provider 是服务未登录场景的功能，登录态与它要兼容衔接、不能让用户来回手动增删。
+  - 改了什么：① **登录态判定**（src/identity.ts 新增 `readStoredOAuthLogin()`）：凭据库 `~/.zcode/v2/credentials.json` 里 `oauth:<provider>:access_token` 的存在即登录态（`oauth:active_provider` 标记优先佐证，标记失效时扫描两家 provider 的 token）；② **身份显示登录优先**（`readLoginIdentitySnapshot()` 重写）：已登录 → 显示登录 provider 的账号身份（vault `user_info` 快照 → bigmodel key 映射 → 脱敏 key），**不再看 `model.main` 指向哪个槽位**——登录当次刷新即可见；未登录且有模型访问 → 新 kind `signedOut`，横幅 / 状态栏显示「Not signed in」，provider 显示剥离 `env-` 前缀后的声明值；无任何访问 → 维持登录向导警告。TUI 侧 `login-identity.ts` 不再镜像实现，直接复用 src 的快照函数（单一实现、杜绝双份漂移）；③ **模型归属自动切换**（env-config.ts）：启动同步时已登录则 `skipModelBlock`（只刷新 `env-` 槽位数据、不改写 `model` 块），遗留指向 `env-` 槽位的 `model` 块由新函数 `switchModelBlockToOfficialProvider()` 切到登录 provider 的官方槽位（模型 ID 官方槽位已声明则保留，否则取其第一个声明模型）；登出后下次启动未登录，文件自动重新接管 `model` 块——登录 / 登出双向无缝，文件永不需手动增删；④ **文件改名 `.env` → `custom-provider.env`**（模板同步改名 `custom-provider.env.example`，内容头部重写为新语义）：首次启动自动把旧 `~/.zcode/cli/.env` 重命名过去并提示一行（`ZCODE_ENV_FILE` 显式指定路径时不迁移）；⑤ **显示剥前缀**（env-config.ts 新增 `displayProviderId()` / `displayModelRef()`）：TUI 模型显示、`zcode identity` 的 Provider 行、`<provider-id>/<model-id>` 一律按文件里声明的原值显示（`env-bigmodel/glm-5.3` → `bigmodel/glm-5.3`），`env-` 前缀仅存于 config.json 内部槽位名（与官方槽位隔离的机制不变）；⑥ **裸 `zcode login` 闸门改为「已登录即拦」**：已登录时提示「Already signed in as <名>」并退出（`--oauth` 强制重登），未登录时即使 custom-provider 已配置也放行走 OAuth——「用户执行 login 就是要登录」；⑦ `zcode identity set` 未登录时拒绝（显示名跟随登录账号，未登录无可设）；⑧ `zcode identity` 未登录时输出 `Identity: not signed in (model access via custom provider)`。
+  - 行为对照（登录 / 登出反馈闭环）：未登录 + 文件 → 模型走 `env-` 槽位、横幅「Not signed in」、模型显示 `<声明 id>/<model>`；`/login` OAuth 授权完成 → vault + 官方槽位落盘、TUI 即时刷新显示「Signed in as <账号名>」、下次启动 model 块归属官方槽位；`/logout` → vault 清空、横幅即时变回「Not signed in」、下次启动文件自动接管模型。
+  - 迁移说明：升级后首次启动自动重命名 `~/.zcode/cli/.env` → `custom-provider.env`（控制台提示一行）；不想迁移可设 `ZCODE_ENV_FILE` 指回旧路径。存量已登录用户的 `model.main` 会在下次启动自动从 `env-<id>/...` 归位到官方槽位。
+  - 验证：`tsc --noEmit` 通过；全量 `bun test` 674 pass / 0 fail（78 files；identity 新增登录态判定 3 用例 + 快照新口径 3 用例、login-identity 改签 signedOut 语义 + 新增 2 用例、env-config 新增迁移 2 + 显示 1 + skipModelBlock 1 + model 块切换 3 用例）。
+
 ## 3.8.1-25 - 2026-09-05
 
 ### 变更

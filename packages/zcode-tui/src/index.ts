@@ -28,6 +28,7 @@ import {
   readBigModelKeyNameHint,
   readProviderApiKeySnapshot
 } from "../../../src/identity.ts";
+import { displayModelRef } from "../../../src/env-config.ts";
 import { readLoginIdentity, type LoginIdentity } from "./login-identity.ts";
 
 import {
@@ -569,7 +570,7 @@ class ZCodeTui {
     this.theme = createTheme(this.colorsEnabled, initialColorScheme(this.themePreference));
     this.transcript = new Transcript(this.theme.searchMatch);
     this.mode = normalizedMode(options.initialMode);
-    this.model = modelLabel(options.initialModel);
+    this.model = displayModelRef(modelLabel(options.initialModel));
     this.thoughtLevel = options.initialThoughtLevel;
     this.modelOptions = [...(options.modelOptions ?? [])];
     this.effortOptions = [...(options.effortOptions ?? [])];
@@ -875,7 +876,7 @@ class ZCodeTui {
 
     const access = code === 0 ? await readConfiguredModelAccess() : null;
     if (access) {
-      this.model = access.model;
+      this.model = displayModelRef(access.model);
       this.setLoginRequired(false);
       this.addNotice(`Model access configured via ${access.configPath}.`, "muted");
     } else if (failure) {
@@ -1619,7 +1620,7 @@ class ZCodeTui {
       this.mode = normalizedMode(result.mode, this.mode);
     }
     if (appliesToSetting(settingTarget, "model") && result.model !== undefined) {
-      this.model = modelLabel(result.model);
+      this.model = displayModelRef(modelLabel(result.model));
     }
     if (typeof result.loginRequired === "boolean") {
       let required = result.loginRequired;
@@ -1637,7 +1638,7 @@ class ZCodeTui {
         && result.model === undefined
         && appliesToSetting(settingTarget, "model")) {
         access ??= await readConfiguredModelAccess();
-        if (access) this.model = access.model;
+        if (access) this.model = displayModelRef(access.model);
       }
     }
     if (appliesToSetting(settingTarget, "effort") && typeof result.thoughtLevel === "string") {
@@ -3296,7 +3297,10 @@ class ZCodeTui {
       ? savedModelConfig.lite
       : undefined;
 
-    const cascade = providerModelPicker(this.modelOptions, savedModel ?? this.model);
+    // Preselect from the saved config value only: it keeps the internal
+    // `<slot>/<model>` form this.model no longer carries (the display form
+    // has the env- prefix stripped).
+    const cascade = providerModelPicker(this.modelOptions, savedModel);
     if (!cascade || cascade.providers.items.length === 0) {
       this.addNotice("No model providers available to configure.", "muted");
       return;
@@ -3425,7 +3429,7 @@ class ZCodeTui {
         .then((config) => (isRecord(config.model) ? config.model as Record<string, unknown> : undefined))
         .catch(() => undefined);
       const savedModelLabel = typeof savedConfig?.main === "string" && savedConfig.main.trim()
-        ? savedConfig.main
+        ? displayModelRef(savedConfig.main.trim())
         : undefined;
       const setting = await this.showChoice({
         title: "ZCode settings",
