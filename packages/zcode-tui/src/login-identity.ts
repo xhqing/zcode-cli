@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 
+import { resolveBigmodelUserName } from "../../../src/bigmodel-users.ts";
 import { userConfigPath } from "../../../src/model-access.ts";
 import { credentialsFilePath, decryptCredential, maskApiKey } from "../../../src/usage.ts";
 
 /** How the active provider authenticates, as shown in the banner and status line. */
 export interface LoginIdentity {
-  kind: "oauth" | "apiKey";
-  /** OAuth account name, or the masked API key. */
+  kind: "oauth" | "named" | "apiKey";
+  /** OAuth account name, a key-mapped name, or the masked API key. */
   label: string;
 }
 
@@ -33,14 +34,15 @@ function identityLabel(value: unknown): string | undefined {
 
 /**
  * Resolves the signed-in identity behind the active provider: the OAuth account
- * name from the encrypted `oauth:<provider>:user_info` credential wins, and the
- * masked API key is only shown when no OAuth login is stored. Order matters:
- * the runtime's OAuth flow exchanges the access token for an API key and writes
- * it into `provider.options.apiKey` (reverse-engineered from the vendor bundle),
- * so an explicit key alongside a stored login is the login's own artifact — the
- * user is still signed in as that account. Returns undefined when neither is
- * available — the login wizard warning covers that state, so nothing
- * identity-like should be displayed.
+ * name from the encrypted `oauth:<provider>:user_info` credential wins, then
+ * (for the BigModel provider) a name mapped to the API key in
+ * `~/.zcode/cli/bigmodel-users.json`, and the masked API key is only shown when
+ * neither is available. Order matters: the runtime's OAuth flow exchanges the
+ * access token for an API key and writes it into `provider.options.apiKey`
+ * (reverse-engineered from the vendor bundle), so an explicit key alongside a
+ * stored login is the login's own artifact — the user is still signed in as
+ * that account. Returns undefined when neither is available — the login wizard
+ * warning covers that state, so nothing identity-like should be displayed.
  */
 export async function readLoginIdentity(
   env: NodeJS.ProcessEnv = process.env
@@ -75,11 +77,17 @@ export async function readLoginIdentity(
   }
 
   const apiKey = typeof provider.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
-  if (apiKey) return { kind: "apiKey", label: maskApiKey(apiKey) };
+  if (apiKey) {
+    if (providerId === "bigmodel") {
+      const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
+      if (label) return { kind: "named", label };
+    }
+    return { kind: "apiKey", label: maskApiKey(apiKey) };
+  }
   return undefined;
 }
 
 /** Banner text for the identity line, e.g. "Signed in as alice" or "API key 916c…e2f1". */
 export function loginIdentityText(identity: LoginIdentity): string {
-  return identity.kind === "oauth" ? `Signed in as ${identity.label}` : `API key ${identity.label}`;
+  return identity.kind === "apiKey" ? `API key ${identity.label}` : `Signed in as ${identity.label}`;
 }

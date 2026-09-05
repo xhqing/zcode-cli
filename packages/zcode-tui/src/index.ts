@@ -8,7 +8,8 @@ import {
   readSetupPending,
   readUserConfig,
   updateUserConfig,
-  userConfigPathHint
+  userConfigPathHint,
+  type ConfiguredModelAccess
 } from "../../../src/model-access.ts";
 import {
   applyDesktopMigration,
@@ -23,6 +24,8 @@ import {
 } from "../../../src/update-check.ts";
 import {
   clearIdentitiesWithChangedKeys,
+  clearOAuthLoginCredentials,
+  readBigModelKeyNameHint,
   readProviderApiKeySnapshot
 } from "../../../src/identity.ts";
 import { readLoginIdentity, type LoginIdentity } from "./login-identity.ts";
@@ -780,11 +783,30 @@ class ZCodeTui {
    */
   private async clearStaleIdentityAfterLogin(before: Record<string, string>): Promise<void> {
     const cleared = await clearIdentitiesWithChangedKeys(before).catch(() => [] as string[]);
-    if (cleared.length === 0) return;
-    await this.refreshLoginIdentity();
+    if (cleared.length > 0) {
+      await this.refreshLoginIdentity();
+      this.addNotice(
+        `Sign-in identity cleared for ${cleared.join(", ")}: the stored name may belong to the previous account. `
+        + "Run `zcode identity set <name>` to display the current account name.",
+        "muted"
+      );
+    }
+    await this.suggestBigModelKeyName();
+  }
+
+  /**
+   * Hints at the key→name mapping after a login that ends on a BigModel API
+   * key without a mapped name — the identity display stays on the masked key
+   * until the user labels the key in `bigmodel-users.json`. The label itself
+   * is the user's choice (user name, key name, anything).
+   */
+  private async suggestBigModelKeyName(): Promise<void> {
+    const hint = await readBigModelKeyNameHint().catch(() => undefined);
+    if (!hint) return;
     this.addNotice(
-      `Sign-in identity cleared for ${cleared.join(", ")}: the stored name may belong to the previous account. `
-      + "Run `zcode identity set <name>` to display the current account name.",
+      `Signed in with a BigModel API key (${hint.apiKeyMasked}). `
+      + `Label it in ${hint.usersPath} ({"<api-key>": "<name>"}) — a user name, a key name `
+      + "or any custom label then replaces the masked key.",
       "muted"
     );
   }
@@ -873,6 +895,34 @@ class ZCodeTui {
     this.finishTurn(code === 0 && access ? "completed" : "failed");
     this.updateMetadata();
     this.ui.requestRender(true);
+  }
+
+  /**
+   * `/logout` handled locally instead of being forwarded to the runtime: the
+   * runtime's logout only deletes the `zai` vault entries, leaving BigModel
+   * OAuth tokens and the account-name snapshot (which the identity display
+   * reads) behind. Config.json API keys stay untouched — they are model-access
+   * configuration (env file or hand-edited), not login state.
+   */
+  private async handleLocalLogout(displayInput: string): Promise<void> {
+    this.transcript.clearSearch();
+    this.transcript.clearCursor();
+    this.addUserMessage(displayInput);
+    const result = await clearOAuthLoginCredentials().catch(() => undefined);
+    if (!result) {
+      this.addNotice("Logout failed: unable to update the credential store.", "error");
+      return;
+    }
+    this.addNotice(
+      result.cleared.length === 0
+        ? "Already logged out."
+        : "Logged out from Z.AI and BigModel.",
+      "muted"
+    );
+    const access = await readConfiguredModelAccess().catch(() => null);
+    this.setLoginRequired(!access);
+    this.updateMetadata();
+    this.ui.requestRender();
   }
 
   private autocompleteCommands(): SlashCommand[] {
@@ -1179,6 +1229,10 @@ class ZCodeTui {
     }
     if (queuedSubmission?.externalLogin || shouldSuspendForLoginCommand(input)) {
       await this.runSuspendedLogin(submission.displayInput);
+      return;
+    }
+    if (input === "/logout") {
+      await this.handleLocalLogout(submission.displayInput);
       return;
     }
 
@@ -1568,11 +1622,21 @@ class ZCodeTui {
       this.model = modelLabel(result.model);
     }
     if (typeof result.loginRequired === "boolean") {
-      this.setLoginRequired(result.loginRequired);
-      if (!result.loginRequired
+      let required = result.loginRequired;
+      let access: ConfiguredModelAccess | null | undefined;
+      if (required) {
+        // The runtime login gate only inspects the official `zai`/`bigmodel`
+        // config slots; env-file entries (env-*) and custom providers
+        // configure access outside them, so verify against config.json
+        // before showing the "not configured" warning.
+        access = await readConfiguredModelAccess().catch(() => null);
+        if (access) required = false;
+      }
+      this.setLoginRequired(required);
+      if (!required
         && result.model === undefined
         && appliesToSetting(settingTarget, "model")) {
-        const access = await readConfiguredModelAccess();
+        access ??= await readConfiguredModelAccess();
         if (access) this.model = access.model;
       }
     }
@@ -4546,7 +4610,7 @@ class ZCodeTui {
     }
     if (this.loginIdentity) {
       const label = sanitizeTerminalText(this.loginIdentity.label, { preserveSgr: false });
-      const prefix = this.loginIdentity.kind === "oauth" ? "user" : "key";
+      const prefix = this.loginIdentity.kind === "apiKey" ? "key" : "user";
       fields.push({
         text: this.theme.muted(`${prefix} ${label}`),
         compactText: this.theme.muted(label),

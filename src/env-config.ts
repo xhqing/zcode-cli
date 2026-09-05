@@ -12,10 +12,11 @@ import { collectApiKeys, numberedApiKeyPattern, placeholderApiKey } from "./key-
  * config.json keep their model settings in `~/.zcode/cli/.env` (copy the
  * template from `.env.example`). The launcher reads that file on every start
  * and syncs it into config.json before the runtime boots: the `.env` file is
- * the authority for the `provider` and `model` blocks of the matching provider
- * ID, every other config.json block stays untouched. An absent or empty `.env`
- * never writes anything, so OAuth logins and hand-edited configs keep working
- * unchanged.
+ * the authority for its own `env-<provider-id>` provider entry and the
+ * `model` block, every other config.json block stays untouched — including
+ * the official `zai`/`bigmodel` slots owned by `/login` OAuth flows. An
+ * absent or empty `.env` never writes anything, so OAuth logins and
+ * hand-edited configs keep working unchanged.
  */
 
 export const envFileVariables = [
@@ -161,10 +162,19 @@ export interface ProviderBuild {
 }
 
 /**
- * Validates env-file values and builds the provider/model config blocks.
- * `providerId` defaults to `zai` because the upstream login gate only accepts
- * API keys stored under provider ID `zai` or `bigmodel`; any other ID is valid
- * model configuration but leaves the login wizard active.
+ * Prefix for the config.json provider slot the env file writes. The env file
+ * never touches the official `zai`/`bigmodel` slots (those belong to `/login`
+ * OAuth flows), so env-file keys and OAuth logins cannot overwrite each other.
+ */
+export const envProviderSlotPrefix = "env-";
+
+/**
+ * Validates env-file values and builds the provider/model config blocks. The
+ * declared `ZCODE_PROVIDER_ID` (default `zai`) names the upstream flavor for
+ * base-URL defaults and display names; the config slot is always
+ * `env-<provider-id>` so env-file configuration lives in its own provider
+ * entry — the upstream runtime login gate only inspects the official
+ * `zai`/`bigmodel` slots, which the launcher-side access check compensates for.
  *
  * Keys are one per variable: `ZCODE_API_KEY` holds the primary key and
  * numbered `ZCODE_API_KEY_2`, `ZCODE_API_KEY_3`, ... hold backups. With a
@@ -205,7 +215,7 @@ export function buildProviderConfig(
   if (!models.has(liteModel)) models.set(liteModel, { name: displayName(liteModel) });
 
   return {
-    providerId,
+    providerId: envProviderSlotPrefix + providerId,
     provider: {
       kind,
       name: values.ZCODE_PROVIDER_NAME?.trim() || displayName(providerId),
@@ -216,7 +226,10 @@ export function buildProviderConfig(
       },
       models: Object.fromEntries(models)
     },
-    model: { main: `${providerId}/${mainModel}`, lite: `${providerId}/${liteModel}` },
+    model: {
+      main: `${envProviderSlotPrefix}${providerId}/${mainModel}`,
+      lite: `${envProviderSlotPrefix}${providerId}/${liteModel}`
+    },
     ...(failoverActive ? {
       failover: { proxyBaseURL: failover!.proxyBaseURL, keyCount: apiKeys.length }
     } : {})

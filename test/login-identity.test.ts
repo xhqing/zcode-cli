@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
+import { bigmodelUsersPath } from "../src/bigmodel-users.ts";
 import {
   loginIdentityText,
   readLoginIdentity
@@ -198,9 +199,74 @@ describe("readLoginIdentity", () => {
   });
 });
 
+describe("readLoginIdentity key-name mapping", () => {
+  test("shows the mapped account name for a bigmodel API key", async () => {
+    await withFixture(
+      { config: oauthConfig("bigmodel", true) },
+      async (env) => {
+        await writeFile(
+          bigmodelUsersPath(env),
+          JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
+        );
+        expect(await readLoginIdentity(env)).toEqual({ kind: "named", label: "Work account" });
+      }
+    );
+  });
+
+  test("keeps the masked key when the mapping file does not cover the key", async () => {
+    await withFixture(
+      { config: oauthConfig("bigmodel", true) },
+      async (env) => {
+        await writeFile(bigmodelUsersPath(env), JSON.stringify({ "another-key": "Other account" }));
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+      }
+    );
+  });
+
+  test("keeps the masked key for a malformed mapping file", async () => {
+    await withFixture(
+      { config: oauthConfig("bigmodel", true) },
+      async (env) => {
+        await writeFile(bigmodelUsersPath(env), "{not json");
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+      }
+    );
+  });
+
+  test("ignores the mapping for non-bigmodel providers", async () => {
+    await withFixture(
+      { config: oauthConfig("custom", true) },
+      async (env) => {
+        await writeFile(
+          bigmodelUsersPath(env),
+          JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
+        );
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+      }
+    );
+  });
+
+  test("the stored OAuth user_info still wins over the mapping", async () => {
+    await withFixture(
+      {
+        config: oauthConfig("bigmodel", true),
+        credentials: storedUser({ displayName: "Alice" })
+      },
+      async (env) => {
+        await writeFile(
+          bigmodelUsersPath(env),
+          JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
+        );
+        expect(await readLoginIdentity(env)).toEqual({ kind: "oauth", label: "Alice" });
+      }
+    );
+  });
+});
+
 describe("loginIdentityText", () => {
   test("labels OAuth accounts and API keys differently", () => {
     expect(loginIdentityText({ kind: "oauth", label: "Alice" })).toBe("Signed in as Alice");
     expect(loginIdentityText({ kind: "apiKey", label: "916c…e2f1" })).toBe("API key 916c…e2f1");
+    expect(loginIdentityText({ kind: "named", label: "Work account" })).toBe("Signed in as Work account");
   });
 });

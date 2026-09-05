@@ -82,7 +82,7 @@ describe("buildProviderConfig", () => {
     const built = buildProviderConfig({ ZCODE_API_KEY: "key", ZCODE_MAIN_MODEL: "glm-5.2" });
     expect("error" in built).toBe(false);
     if ("error" in built) return;
-    expect(built.providerId).toBe("zai");
+    expect(built.providerId).toBe("env-zai");
     expect(built.provider).toEqual({
       kind: "anthropic",
       name: "Zai",
@@ -93,7 +93,7 @@ describe("buildProviderConfig", () => {
       },
       models: { "glm-5.2": { name: "Glm 5.2" } }
     });
-    expect(built.model).toEqual({ main: "zai/glm-5.2", lite: "zai/glm-5.2" });
+    expect(built.model).toEqual({ main: "env-zai/glm-5.2", lite: "env-zai/glm-5.2" });
   });
 
   test("declares extra models and validates inputs", () => {
@@ -110,7 +110,7 @@ describe("buildProviderConfig", () => {
       "glm-5-turbo",
       "glm-5.1"
     ]);
-    expect(built.model.main).toBe("bigmodel/glm-5.2");
+    expect(built.model.main).toBe("env-bigmodel/glm-5.2");
 
     const invalidProviderId = buildProviderConfig({
       ZCODE_API_KEY: "key",
@@ -191,8 +191,8 @@ describe("syncEnvFileToConfig", () => {
     expect(result.error).toBeUndefined();
 
     const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
-    expect(config.model).toEqual({ main: "bigmodel/glm-5.2", lite: "bigmodel/glm-5-turbo" });
-    expect(config.provider.bigmodel.options).toEqual({
+    expect(config.model).toEqual({ main: "env-bigmodel/glm-5.2", lite: "env-bigmodel/glm-5-turbo" });
+    expect(config.provider["env-bigmodel"].options).toEqual({
       apiKey: "test-key",
       apiKeyRequired: true,
       baseURL: "https://open.bigmodel.cn/api/anthropic"
@@ -218,7 +218,7 @@ describe("syncEnvFileToConfig", () => {
     expect(result.failover).toEqual({ proxyBaseURL: "http://127.0.0.1:7849/api/anthropic", keyCount: 3 });
 
     const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
-    expect(config.provider.bigmodel.options).toEqual({
+    expect(config.provider["env-bigmodel"].options).toEqual({
       apiKey: placeholderApiKey,
       apiKeyRequired: true,
       baseURL: "http://127.0.0.1:7849/api/anthropic"
@@ -232,7 +232,8 @@ describe("syncEnvFileToConfig", () => {
     await mkdir(configDirectory, { recursive: true });
     await writeFile(userConfigPath(env), JSON.stringify({
       provider: {
-        zai: { options: { apiKey: "oauth-key" }, models: { "glm-5.2": { name: "GLM-5.2" } } }
+        zai: { options: { apiKey: "oauth-key" }, models: { "glm-5.2": { name: "GLM-5.2" } } },
+        bigmodel: { options: { apiKey: "bigmodel-oauth-key" }, models: { "glm-5.2": { name: "GLM-5.2" } } }
       },
       model: { main: "zai/glm-5.2", lite: "zai/glm-5-turbo" },
       modelStream: { idleTimeoutMs: 60000 },
@@ -243,11 +244,17 @@ describe("syncEnvFileToConfig", () => {
     await syncEnvFileToConfig(env);
 
     const config = JSON.parse(await readFile(userConfigPath(env), "utf8"));
+    // Official slots (owned by /login OAuth flows) stay exactly as they were.
     expect(config.provider.zai).toEqual({
       options: { apiKey: "oauth-key" },
       models: { "glm-5.2": { name: "GLM-5.2" } }
     });
-    expect(config.provider.bigmodel).toBeDefined();
+    expect(config.provider.bigmodel).toEqual({
+      options: { apiKey: "bigmodel-oauth-key" },
+      models: { "glm-5.2": { name: "GLM-5.2" } }
+    });
+    expect(config.provider["env-bigmodel"]).toBeDefined();
+    expect(config.model).toEqual({ main: "env-bigmodel/glm-5.2", lite: "env-bigmodel/glm-5-turbo" });
     expect(config.modelStream).toEqual({ idleTimeoutMs: 60000 });
     expect(config.permission).toEqual({ mode: "build" });
   });

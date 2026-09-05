@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Writable } from "node:stream";
 
+import { bigmodelUsersPath, resolveBigmodelUserName } from "./bigmodel-users.ts";
 import { userConfigPath } from "./model-access.ts";
 import { credentialsFilePath, decryptCredential, encryptCredential, maskApiKey } from "./usage.ts";
 
@@ -62,7 +63,7 @@ async function activeProviderId(env: NodeJS.ProcessEnv): Promise<string> {
 
 export interface LoginIdentitySnapshot {
   providerId: string;
-  kind: "oauth" | "apiKey";
+  kind: "oauth" | "named" | "apiKey";
   label: string;
 }
 
@@ -70,6 +71,8 @@ export interface LoginIdentitySnapshot {
  * Resolves the sign-in identity the TUI banner/status line shows. Mirrors the
  * lookup order of `packages/zcode-tui/src/login-identity.ts` (duplicated here
  * because the TUI package depends on `src/`, not the other way around).
+ * A BigModel API key mapped in `~/.zcode/cli/bigmodel-users.json` resolves to
+ * kind "named" with the mapped display name, before the masked-key fallback.
  */
 export async function readLoginIdentitySnapshot(
   env: NodeJS.ProcessEnv = process.env
@@ -94,8 +97,47 @@ export async function readLoginIdentitySnapshot(
   }
 
   const apiKey = typeof provider.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
-  if (apiKey) return { providerId, kind: "apiKey", label: maskApiKey(apiKey) };
+  if (apiKey) {
+    if (providerId === "bigmodel") {
+      const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
+      if (label) return { providerId, kind: "named", label };
+    }
+    return { providerId, kind: "apiKey", label: maskApiKey(apiKey) };
+  }
   return undefined;
+}
+
+export interface BigModelKeyNameHint {
+  apiKeyMasked: string;
+  usersPath: string;
+}
+
+/**
+ * Present when the active provider is BigModel and its identity resolves to the
+ * masked API key with no mapped name — the state where adding the key to
+ * `bigmodel-users.json` would upgrade the display. Login flows and the
+ * identity command use it to point users at the mapping file.
+ */
+export async function readBigModelKeyNameHint(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<BigModelKeyNameHint | undefined> {
+  const identity = await readLoginIdentitySnapshot(env).catch(() => undefined);
+  if (!identity || identity.providerId !== "bigmodel" || identity.kind !== "apiKey") return undefined;
+  return { apiKeyMasked: identity.label, usersPath: bigmodelUsersPath(env) };
+}
+
+/** Prints the one-line mapping hint for a freshly signed-in unnamed BigModel key. */
+export async function printBigModelKeyNameHint(
+  env: NodeJS.ProcessEnv = process.env,
+  output: Writable = process.stdout
+): Promise<void> {
+  const hint = await readBigModelKeyNameHint(env);
+  if (!hint) return;
+  output.write(
+    `Tip: label this API key (${hint.apiKeyMasked}) by adding {"<api-key>": "<name>"} to `
+    + `${hint.usersPath} — the label then replaces the masked key; `
+    + "a user name, a key name or any custom label works.\n"
+  );
 }
 
 /**
@@ -157,6 +199,80 @@ export function isIdentityInvocation(args: string[]): boolean {
   return args.length === 3 && args[1] === "set" && args[2].trim().length > 0;
 }
 
+export function isLogoutInvocation(args: string[]): boolean {
+  return args.length === 1 && args[0] === "logout";
+}
+
+/**
+ * Vault keys a full logout removes. The runtime's own `clearZaiLoginCredentials`
+ * deletes only the four `zai` keys (its BigModel OAuth flow writes
+ * `oauth:bigmodel:*` entries it never cleans up), so the CLI clears both
+ * providers plus the shared markers itself.
+ */
+const logoutVaultKeys = [
+  "oauth:zai:access_token",
+  "oauth:zai:refresh_token",
+  "oauth:zai:user_info",
+  "oauth:bigmodel:access_token",
+  "oauth:bigmodel:refresh_token",
+  "oauth:bigmodel:user_info",
+  "oauth:login_attribution",
+  "oauth:active_provider",
+  "zcodejwttoken"
+];
+
+export interface LogoutResult {
+  credentialsPath: string;
+  /** Vault keys that were present and got deleted. */
+  cleared: string[];
+}
+
+/**
+ * Removes every stored sign-in credential from the shared vault. Idempotent: a
+ * missing vault or already-deleted keys still report success. Config.json API
+ * keys are deliberately untouched — they are model-access configuration, not
+ * login state (an env-file or hand-edited key keeps working after logout).
+ */
+export async function clearOAuthLoginCredentials(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<LogoutResult> {
+  const credentialsPath = credentialsFilePath(env);
+  const cleared: string[] = [];
+  try {
+    const vault = await readVault(env);
+    for (const key of logoutVaultKeys) {
+      if (key in vault) {
+        delete vault[key];
+        cleared.push(key);
+      }
+    }
+    if (cleared.length > 0) await writeVault(vault, env);
+  } catch {
+    // No vault or unreadable file: nothing was signed in.
+  }
+  return { credentialsPath, cleared };
+}
+
+/**
+ * `zcode logout` — clears the stored Z.AI and BigModel sign-in credentials.
+ * Intercepts the runtime invocation because the runtime's logout only removes
+ * the `zai` entries, leaving BigModel OAuth tokens and the account-name
+ * snapshot (which the TUI identity display reads) behind.
+ */
+export async function runLogoutCommand(options: {
+  env?: NodeJS.ProcessEnv;
+  output?: Writable;
+} = {}): Promise<number> {
+  const output = options.output ?? process.stdout;
+  const result = await clearOAuthLoginCredentials(options.env);
+  if (result.cleared.length === 0) {
+    output.write(`Already logged out. Credentials: ${result.credentialsPath}\n`);
+    return 0;
+  }
+  output.write(`Logged out from Z.AI and BigModel. Credentials: ${result.credentialsPath}\n`);
+  return 0;
+}
+
 /**
  * `zcode identity` — shows the sign-in identity behind the active provider.
  * `zcode identity set <name>` — rewrites the local `oauth:<provider>:user_info`
@@ -183,7 +299,13 @@ export async function runIdentityCommand(options: {
     return 0;
   }
   write(`Provider: ${identity.providerId}`);
-  write(`Identity: ${identity.kind === "oauth" ? `signed in as ${identity.label}` : `API key ${identity.label}`}`);
+  write(`Identity: ${identity.kind === "apiKey" ? `API key ${identity.label}` : `signed in as ${identity.label}`}`);
+  if (identity.providerId === "bigmodel" && identity.kind === "apiKey") {
+    write(
+      `Tip: label this API key by adding {"<api-key>": "<name>"} to ${bigmodelUsersPath(env)} `
+      + "— the label then replaces the masked key; a user name, a key name or any custom label works."
+    );
+  }
   return 0;
 }
 

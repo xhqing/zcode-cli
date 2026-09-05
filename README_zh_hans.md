@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--24-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--25-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 [English](README.md) | 简体中文 | [繁體中文](README_zh_hant.md)
@@ -26,7 +26,7 @@
 ## 快速开始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安装与更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 ```
 
 GitHub Release 是唯一的分发渠道，本项目不发布到 npm。包装名为
@@ -127,6 +127,25 @@ displayName（保留 id / 头像等其余字段与凭证库相邻条目），新
   TUI 自动清除旧名、回落显示脱敏 API key（同账号重新登录则保留原名）；
   之后可用 `zcode identity set <名称>` 重新固定当前账号的显示名。
 
+针对 BigModel API key 登录，还有一种按 key 归属、天然免疫账号切换的
+方式：维护 `~/.zcode/cli/bigmodel-users.json`——BigModel 登录通道专属的
+平铺 JSON 映射表（API key → 显示名，有意不放进模型访问的 `.env`）：
+
+```json
+{
+  "<api-key>": "工作账号",
+  "<api-key>": "个人账号"
+}
+```
+
+显示名完全由你决定、自由填写——用户名、key 备注名、账号名或任意你想
+贴在这个 key 上的标签都可以，它只是本地显示文本。活跃 provider 的 key
+命中映射时，横幅、状态栏与 `zcode identity` 显示映射的名字
+（*Signed in as …* 形式）；未命中的 key 维持脱敏显示。由于每个 key 自带
+显示名，切换账号始终显示你给当前 key 指定的名字、无需重新固定。
+BigModel 登录后若当前 key 尚无映射，TUI（与 `zcode login`）会打印一行
+提示指向该文件。
+
 ## 架构
 
 ```text
@@ -159,7 +178,8 @@ Ctrl+N 切换模型、空输入 Tab 切换推理力度；回合脚注右侧的�
 **登录与权限。** `/login` 设置选项与掩码 API key 输入；脱敏的会话记录与历史；
 OAuth 等待态；挂起的 Z.AI 浏览器登录（含终端恢复与可选的 `ZCODE_TUI_LOGIN_CMD`
 覆盖）；启动横幅与状态栏显示登录身份（OAuth 账号用户名或脱敏 API key）；
-交互式工具权限审批对话框。
+`/logout` 清除已存的 Z.AI 与 BigModel 登录凭证（config 里的 API key 属模型
+访问配置，保留不动）；交互式工具权限审批对话框。
 
 **附件与富输出。** Ctrl+V 智能粘贴剪贴板（图片加为附件、文本直接插入编
 辑器），`/paste-image` 专贴图片，配键盘可选的附件行；紧凑的工具执行视图（路径、命令、进度、结果与图片预览）；父子 Agent 工具树
@@ -401,7 +421,8 @@ API key、或带自定义 provider 的直连 API key。详细的设置步骤、�
 
 另有扁平文件方式：把带注释的 `.env.example` 模板复制为 `~/.zcode/cli/.env`
 并填入 API key 与模型 ID——每次启动时 zcode 会先把它同步进 config.json 再拉起
-runtime，无需登录或手改 JSON。备用 key 用编号变量（`ZCODE_API_KEY_2`、
+runtime，无需登录或手改 JSON。同步结果写入独立的 `env-<provider-id>` 槽位，
+`.env` 配置与 `/login` OAuth 凭证互不覆盖。备用 key 用编号变量（`ZCODE_API_KEY_2`、
 `ZCODE_API_KEY_3`……每变量一把 key）：多于一把时 zcode 会启用本地回环容灾代理，
 某把 key 的请求被拒（401/403/429、5xx、连接失败）时自动换下一把重试，详见
 [配置文档](./docs/CONFIGURATION.md)。

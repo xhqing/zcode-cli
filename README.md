@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--24-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--25-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 English | [简体中文](README_zh_hans.md) | [繁體中文](README_zh_hant.md)
@@ -29,7 +29,7 @@ redistribute the extracted runtime before publishing a release.
 ## Quick start
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 zcode
 ```
 
@@ -59,9 +59,9 @@ Reopen it anytime with `/setup`; press Esc to skip.
 ## Install and update
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 # or
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-24.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-25.tgz
 ```
 
 GitHub Releases are the only distribution channel; the project does not
@@ -145,6 +145,28 @@ Account switches are handled automatically, in two layers:
   stale name and falls back to the masked key (same-account re-login keeps
   the name). Re-pin the current account with `zcode identity set <name>`.
 
+For BigModel API-key sign-ins there is a per-key alternative that survives
+account switches by design: maintain `~/.zcode/cli/bigmodel-users.json`, a
+flat JSON map of API key → display name owned by the BigModel login channel
+(kept out of the model-access `.env` on purpose):
+
+```json
+{
+  "<api-key>": "Work account",
+  "<api-key>": "Personal account"
+}
+```
+
+The mapped value is a free-form label — the choice is entirely yours: a user
+name, a key remark, an account name, or anything else you want to see next to
+the key. It is purely local display text. When the active provider's key has
+an entry, the banner, the status line and `zcode identity` show the mapped
+name (as *Signed in as …*); unmapped keys keep the masked-key display. Since
+every key carries its own label, switching accounts always shows the one you
+assigned to the signed-in key, with no re-pinning. After a BigModel login
+whose key has no entry yet, the TUI (and `zcode login`) print a one-line hint
+pointing at the file.
+
 ## Architecture
 
 ```text
@@ -184,8 +206,9 @@ fallback; responsive context-remaining and session-token metrics.
 redacted transcript/history and OAuth waiting state; suspended Z.AI browser
 login with terminal restoration and an optional `ZCODE_TUI_LOGIN_CMD`
 override; sign-in identity (OAuth account name or masked API key) shown in
-the welcome banner and status bar; interactive tool-permission approval
-dialogs.
+the welcome banner and status bar; `/logout` clears the stored Z.AI and
+BigModel sign-in credentials (config API keys are model-access configuration
+and stay); interactive tool-permission approval dialogs.
 
 **Attachments and rich output.** Smart clipboard paste via Ctrl+V (an image
 becomes an attachment, plain text is inserted into the editor) or `/paste-image`
@@ -486,7 +509,9 @@ setup steps, retries/timeouts, theme, and turn-completion notifications, see
 As a flat-file alternative, copy the commented `.env.example` template to
 `~/.zcode/cli/.env` and fill in your API key and model IDs: on every start
 zcode syncs that file into config.json before the runtime boots, no login or
-JSON editing required. Backup keys go into numbered variables
+JSON editing required. The synced entry lives in its own `env-<provider-id>`
+slot, so `.env` configuration and `/login` OAuth credentials never overwrite
+each other. Backup keys go into numbered variables
 (`ZCODE_API_KEY_2`, `ZCODE_API_KEY_3`, ... — one key per variable): with more
 than one key zcode runs a loopback failover proxy that
 transparently retries each request with the next key when one is rejected

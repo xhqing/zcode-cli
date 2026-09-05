@@ -2,6 +2,24 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-25 - 2026-09-05
+
+### 变更
+
+- **新增 BigModel API key → 显示名映射表 `~/.zcode/cli/bigmodel-users.json`：按 key 自定义登录显示名（用户名 / key 名 / 任意标签均可，纯本地显示文本），切换账号不再需要重新固定显示名；登录后未配置映射时提示该功能**（src/bigmodel-users.ts 新建、src/identity.ts、src/launcher.ts、packages/zcode-tui/src/login-identity.ts、packages/zcode-tui/src/index.ts、test/identity.test.ts、test/login-identity.test.ts、README.md、README_zh_hans.md、README_zh_hant.md、docs/CONFIGURATION.md）。
+  - 为什么改：BigModel 登录（OAuth 与 API key 变体）只把换发 / 粘贴的 API key 写进 config.json、拿不到账号名，身份显示回落脱敏 key；多账号用户切换后既看不到「现在是谁」，旧机制 `zcode identity set` 又是 provider 级快照——每次切换都要手动重设，忘设就显示错误名字。按 key 维护映射表后每个 key 自带显示名，切换天然正确。
+  - 改了什么：① 新建 src/bigmodel-users.ts——`bigmodelUsersPath()`（`~/.zcode/cli/bigmodel-users.json`，BigModel 登录通道专属、有意不放 `.env`）、`readBigmodelUserNames()`（容错读取：文件缺失 / 坏 JSON / 非对象一律空表，非字符串与空白条目跳过）、`resolveBigmodelUserName()`；② 身份解析（src/identity.ts 的 `readLoginIdentitySnapshot` 与 TUI login-identity.ts 的 `readLoginIdentity` 镜像接入）：优先级 vault `user_info` 快照 → **bigmodel key 查映射（命中返回新 kind `named`，横幅 / 状态栏显示 `Signed in as <名>`、状态栏前缀 `user`）** → 脱敏 key 回落；映射只对 provider `bigmodel` 生效（zai / custom 不查）；③ 提示三处：`readBigModelKeyNameHint()` 判定「bigmodel + 身份回落脱敏 key + 无映射」，TUI `/login` 不可归因变体（bigmodel-coding-plan 与两种 api-key）后经 `suggestBigModelKeyName()` 提示、CLI 裸 `zcode login` 成功后经 `printBigModelKeyNameHint()` 提示、`zcode identity` 显示脱敏 key 时附 Tip 行；提示只含脱敏 key 与文件路径，不回显完整 key。④ 测试新增 13 用例（src 侧 8：named 解析、oauth 优先、provider 限定、读取容错、hint 正负例、identity 命令 Tip 有无；TUI 侧 5：named / 未覆盖 / 坏文件 / 非 bigmodel / oauth 优先，另 loginIdentityText 补 named 文案断言）。
+  - 边界说明：映射值由用户完全自主填写——user-name、key-name、account-name 或任意自定义标签均可，实现与文档均不限定语义（纯本地显示文本，不改任何认证 / 请求行为）；`.env` 通道的 `env-bigmodel` 槽位不查映射（与 `/login` 解耦的既定边界）；`zcode identity set` 机制保留不变（适用于「同账号改用户名」场景，映射适用于「多 key 多账号」场景，两者互补）。
+- **修复 `/logout` 删不掉 BigModel 凭证：CLI 与 TUI 双侧拦截、补全删除清单（zai + bigmodel + 共享标记）**（src/identity.ts、src/launcher.ts、packages/zcode-tui/src/index.ts、test/identity.test.ts）。
+  - 为什么改：用户报告在 TUI 执行 `/logout` 后模型照常可用、底部仍显示账号用户名。逆向 vendor/zcode.cjs 实锤根因——runtime 的 logout 最终实现 `clearZaiLoginCredentials()` 硬编码只删 4 个固定键（`oauth:zai:access_token` / `oauth:zai:refresh_token` / `oauth:zai:user_info` / `zcodejwttoken`，且仅当 `oauth:active_provider` 解密后等于 `zai` 才顺带删它），而 BigModel OAuth 流程写入的 `oauth:bigmodel:access_token`、`oauth:bigmodel:user_info`、`oauth:login_attribution` 均不在删除清单里——CLI `zcode logout` 实测输出「Logged out from Z.AI」且凭证文件确被写入、但 vault 条目一个没少。用户名残留的直接原因即 `oauth:bigmodel:user_info` 删不掉（TUI 身份显示优先读它）。
+  - 改了什么：① src/identity.ts 新增 `clearOAuthLoginCredentials()`——删除清单覆盖两家 provider 全部凭证 + 共享标记（zai 三件套、bigmodel access/refresh/user_info、`oauth:login_attribution`、`oauth:active_provider`、`zcodejwttoken`），保留无关条目（如 `zcodefeedbackclientid` 遥测 ID），幂等（vault 缺失或已清空均成功）；`runLogoutCommand()` / `isLogoutInvocation()` 组成 CLI 命令出口；② launcher.ts 在 identity 路由后拦截 `zcode logout`，不再透传 runtime（runtime 的 logout 删除清单是本实现的子集，拦截后行为是超集）；③ TUI `submit()` 对 `/logout` 本地拦截（与 `/login zai-coding-plan` 挂起同层），新增 `handleLocalLogout()`：清凭证 → notice 反馈 → `readConfiguredModelAccess()` 复核登录态（无模型访问配置才置 loginRequired 警告；`.env` / 手配用户 logout 后模型访问仍在，符合「API key 是模型访问配置、不是登录态」的语义边界）→ `setLoginRequired` 内联触发身份刷新（user_info 已删，显示回落脱敏 key 或消失）。
+  - 边界说明：logout 只清 vault 登录凭证，不清 config.json 里的 API key（与官方 runtime 语义一致——OAuth 换发的 key 本身是独立有效凭证；想断模型访问须删 `.env` 或改 config）。
+- **`.env` 配置改写独立 `env-<provider-id>` 槽位，与 `/login` / `/logout` OAuth 体系彻底解耦**（src/env-config.ts、packages/zcode-tui/src/index.ts、test/env-config.test.ts）。
+  - 为什么改：用户本意 `.env` 是 custom provider 通道（z.ai / bigmodel.cn / deepseek 等任意 provider 通用、不影响正常登录登出），但旧实现把 `.env` 的 key 直接写进声明 id 对应的 config 槽位（`ZCODE_PROVIDER_ID=bigmodel` 就写 `provider.bigmodel`）——与 OAuth 登录写入的是同一个官方槽位，导致三方纠缠：`.env` 的 key 被当成官方登录产物（TUI 显示 OAuth 用户名）、OAuth 登录会覆盖 `.env` 配置、`zcode login` 因官方槽位有 key 而提示「无需登录」。溯源该默认是有意设计（借官方槽位压制上游登录门禁——runtime 的 `hasConfiguredCodingPlanApiKey` 只认 zai/bigmodel 两槽位），但代价即上述纠缠，与 `.env`「任意 provider 通用通道」的定位冲突。
+  - 改了什么：① env-config.ts 的 `buildProviderConfig()` 输出槽位一律改为 `env-<声明 id>`（`ZCODE_PROVIDER_ID=bigmodel` → 写 `provider["env-bigmodel"]`、`model.main = "env-bigmodel/glm-5.2"`；声明 id 仍用于 baseURL 默认表与 provider 显示名）；导出 `envProviderSlotPrefix` 常量；官方 zai/bigmodel 槽位从此归 OAuth 流程独有，`.env` 与 `/login` 互不覆盖；② TUI `handleResult()` 对 runtime 推送的 `loginRequired=true` 先用 `readConfiguredModelAccess()`（槽位无关：只看 model.main 指向的 provider 是否有非空 key）复核，有配置则不显示「Model access is not configured」警告——补偿 runtime 登录门禁只认官方两槽位的行为，`env-*` 槽位与手配 custom provider 均受益；③ 身份显示无需改动自动退化（login-identity.ts 只对 zai/bigmodel 查 vault 的 user_info，`env-*` 槽位显示脱敏 key）。
+  - 迁移说明：升级后首次启动 `.env` 同步即切到 `env-*` 槽位；旧官方槽位残留的 key 保留不删（无害残留，OAuth 登录可正常覆盖它）。存量用户界面上的模型标识会从 `bigmodel/glm-5.3` 变为 `env-bigmodel/glm-5.3`（语义更准确：这是 `.env` 通道的配置）。
+  - 验证：`tsc --noEmit` 通过；全量 `bun test` 644 pass / 0 fail（78 files；env-config 槽位断言更新 +「官方槽位不被 `.env` 触碰」用例加强、identity 新增 logout 5 用例）。
+
 ## 3.8.1-24 - 2026-09-04
 
 ### 变更

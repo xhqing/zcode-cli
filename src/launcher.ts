@@ -30,7 +30,13 @@ import {
 import { requestAppServer } from "./app-server-client.ts";
 import { runPluginCommand } from "./plugin-cli.ts";
 import { isUpdateInvocation, runSelfUpdate } from "./update.ts";
-import { isIdentityInvocation, runIdentityCommand } from "./identity.ts";
+import {
+  isIdentityInvocation,
+  isLogoutInvocation,
+  printBigModelKeyNameHint,
+  runIdentityCommand,
+  runLogoutCommand
+} from "./identity.ts";
 import { isStatsInvocation, runStatsReport } from "./usage.ts";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -439,6 +445,10 @@ export async function main(args: string[]): Promise<number> {
     return await runIdentityCommand({ args });
   }
 
+  if (isLogoutInvocation(args)) {
+    return await runLogoutCommand();
+  }
+
   let setupPending = false;
   try {
     const bootstrap = await ensureUserConfig();
@@ -556,7 +566,11 @@ export async function main(args: string[]): Promise<number> {
 
   try {
     const runtimeArgs = withDefaultBrowserUse(login.args);
-    return await runRuntime(node, runtimeArgs, firstRunSetupEnv(setupPending, runtimeArgs));
+    const code = await runRuntime(node, runtimeArgs, firstRunSetupEnv(setupPending, runtimeArgs));
+    // A successful interactive `zcode login` may have landed on a BigModel API
+    // key; when it has no mapped name yet, point the user at the mapping file.
+    if (code === 0 && login.args[0] === "login") await printBigModelKeyNameHint();
+    return code;
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;

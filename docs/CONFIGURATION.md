@@ -113,17 +113,20 @@ ZCODE_MAIN_MODEL=glm-5.2
 ```
 
 Optional entries (all documented inline in `.env.example`): the provider ID
-(`ZCODE_PROVIDER_ID`, default `zai`; use `zai` or `bigmodel` because the
-upstream login gate only recognizes API keys under those IDs), the display
-name, the wire protocol (`ZCODE_PROVIDER_KIND`: `anthropic`, `openai`, or
+(`ZCODE_PROVIDER_ID`, default `zai` — any lowercase ID works; the synced
+config lives in its own `env-<provider-id>` slot, so it never collides with
+the official `zai`/`bigmodel` slots owned by `/login`; `zai` and `bigmodel`
+additionally carry built-in base-URL defaults), the display name, the wire
+protocol (`ZCODE_PROVIDER_KIND`: `anthropic`, `openai`, or
 `openai-compatible`), the endpoint root (`ZCODE_BASE_URL`), the lite model for
 lightweight/subagent work (`ZCODE_LITE_MODEL`), and extra models for the picker
 (`ZCODE_EXTRA_MODELS`, comma-separated `id` or `id:Display Name` entries).
 
 On every start zcode reads the file and syncs it into `config.json` before the
-runtime boots. The file is the authority for its own provider entry and the
-`model` block; other providers (for example credentials written by an OAuth
-login) and every unrelated config block are left untouched. A file without
+runtime boots. The file is the authority for its own `env-<provider-id>`
+provider entry and the `model` block; other providers (for example credentials
+written by an OAuth login) and every unrelated config block are left
+untouched. A file without
 model settings is ignored, an absent file changes nothing, and invalid values
 stop startup with a clear error pointing at the offending entry. Deleting the
 file returns control to `config.json`.
@@ -201,6 +204,30 @@ The callback receiver is removed after success, cancellation or timeout. A
 small recovery record lets the next login restore the previous handler after
 an unclean process exit. The BigModel option continues to use the official
 localhost-callback implementation inside the runtime.
+
+#### Named BigModel API keys
+
+BigModel logins land on an API key whose account name the runtime never
+stores, so the identity display falls back to the masked key. To show a name
+of your choosing instead — one that stays correct across account switches —
+map the keys in `~/.zcode/cli/bigmodel-users.json` (a login-channel file,
+kept out of the model-access `.env`):
+
+```json
+{
+  "<api-key>": "Work account",
+  "<api-key>": "Personal account"
+}
+```
+
+The mapped value is a free-form label — the choice is entirely yours: a user
+name, a key remark, an account name, or anything else you want to see next to
+the key. It is purely local display text. A key with an entry is displayed as
+its mapped name in the TUI banner, the status line and `zcode identity`;
+unmapped keys keep the masked-key display. After a BigModel login whose key
+has no entry yet, the TUI and `zcode login` print a one-line hint pointing at
+the file. A missing or malformed file is ignored, as are non-string or blank
+entries.
 
 ### Custom provider without login
 

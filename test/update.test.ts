@@ -200,7 +200,7 @@ describe("launcher --update dispatch", () => {
       await chmod(fakeGh, 0o755);
       const result = await runLauncher(["--update"], { PATH: `${directory}:${process.env.PATH}` });
       expect(result.stdout).toContain("Checking for zcode-cli updates…");
-      expect(result.stdout).toContain("Current version : 3.8.1-24");
+      expect(result.stdout).toContain("Current version : 3.8.1-25");
       expect(result.stdout).toContain("Latest version  : 99.0.0-1 (xhqing/zcode-cli release)");
     } finally {
       await rm(directory, { recursive: true, force: true });
