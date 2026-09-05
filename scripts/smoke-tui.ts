@@ -18,6 +18,7 @@ const decoder = new TextDecoder();
 let output = "";
 const temporaryHome = await mkdtemp(join(tmpdir(), "zcode-cli-smoke-"));
 const configPath = join(temporaryHome, ".zcode", "cli", "config.json");
+const bigmodelUsersPath = join(temporaryHome, ".zcode", "cli", "bigmodel-users.json");
 const updateCachePath = join(temporaryHome, ".zcode", "cli", "version.json");
 const smokeSkillPath = join(temporaryHome, ".agents", "skills", "smoke-review", "SKILL.md");
 const availableVersion = nextBuildVersion(packageVersion);
@@ -207,8 +208,12 @@ try {
     /Enter BigModel Coding Plan API Key|输入 BigModel Coding Plan API Key/i
   );
   await sendAndWait(smokeApiKey, "BigModel masked API key value", /\*{20,}/i);
+  // The composed `/login bigmodel-coding-plan-api-key <key>` submission
+  // collects a user name before the login runs; the name is bound to the
+  // landed key and the banner shows "API key <name> (<masked>)".
+  await sendAndWait("\r", "BigModel user name prompt", /Name this sign-in|Enter a name/i);
   const bigmodelSetupStart = await sendAndWait(
-    "\r",
+    "smoke\r",
     "BigModel API key setup",
     /Configured BigModel Coding Plan|已配置 BigModel Coding Plan/i
   );
@@ -217,6 +222,7 @@ try {
     /(?:Configured BigModel Coding Plan|已配置 BigModel Coding Plan)[\s\S]*◈ bigmodel\/glm-5\.2/i,
     bigmodelSetupStart
   );
+  await waitFor("BigModel named identity banner", /API key smoke \(/i, bigmodelSetupStart);
   await sendAndWait("/help\r", "help output", /Slash commands:|Usage:/i);
   await sendAndWait("/mode plan\r", "plan mode", /mode switched to plan|current mode: plan|◈ default ─ ◉ plan/i);
   terminal.write("/exit\r");
@@ -238,15 +244,20 @@ if (!interactionError) {
 const configured = await Bun.file(configPath).exists()
   ? await Bun.file(configPath).text()
   : "";
+const bigmodelUsers = await Bun.file(bigmodelUsersPath).exists()
+  ? await Bun.file(bigmodelUsersPath).text()
+  : "";
 const setupPendingPath = join(temporaryHome, ".zcode", "cli", "setup-pending");
 // The wizard was skipped interactively and the API keys configured model
 // access, so the pending marker must not survive the session.
 if (await Bun.file(setupPendingPath).exists()) {
   interactionError ??= new Error("The first-run setup marker was not cleared after setup.");
 }
+// config.json (official slots) and bigmodel-users.json (the key-name mapping,
+// 0600, key-addressed by design) are the two sanctioned local key stores.
 const leakedFiles: string[] = [];
 for (const path of await filesBelow(temporaryHome)) {
-  if (path === configPath) continue;
+  if (path === configPath || path === bigmodelUsersPath) continue;
   const content = Buffer.from(await Bun.file(path).arrayBuffer());
   if (content.includes(smokeApiKey)) leakedFiles.push(path);
 }
@@ -289,6 +300,10 @@ if (!configured.includes(smokeApiKey)
   || !configured.includes('"main": "bigmodel/glm-5.2"')
   || !configured.includes('"lite": "bigmodel/glm-4.7"')) {
   throw new Error("The official runtime did not persist the Coding Plan configuration.");
+}
+// The forced user-name step must have bound the entered name to the landed key.
+if (!(JSON.parse(bigmodelUsers || "{}")[smokeApiKey] === "smoke")) {
+  throw new Error("The BigModel login did not bind the entered user name to the key.");
 }
 if (leakedFiles.length > 0) {
   throw new Error(`The API key leaked outside config.json: ${leakedFiles.join(", ")}`);
