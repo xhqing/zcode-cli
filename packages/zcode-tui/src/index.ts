@@ -231,6 +231,7 @@ import {
 import { Transcript } from "./transcript.ts";
 import {
   TURN_TIMER_FRAME_DURATION_MS,
+  turnStatusDirectoryText,
   turnStatusText,
   turnTimerAnimationEnabled
 } from "./turn-status.ts";
@@ -474,6 +475,7 @@ class ZCodeTui {
   private queuedSelectionCommand?: QueuedSubmission;
   private readonly inputQueue: InputQueue;
   private turnAbortController?: AbortController;
+  private turnStatusDirectory?: string;
   private foregroundTurnInterrupt?: AbortController;
   private readonly steerAbortControllers = new Set<AbortController>();
   private primaryTurnActive = false;
@@ -4664,9 +4666,20 @@ class ZCodeTui {
       this.turnStartedAt !== undefined && this.animateTurnTimer,
       this.turnStartedAt === undefined && this.turnTimingVisible
     ) ?? "";
-    const left = text
+    // The banner scrolls away, so the footer repeats the workspace directory
+    // beside the timer: parallel sessions in different directories otherwise
+    // become indistinguishable.
+    this.turnStatusDirectory ??= turnStatusDirectoryText(
+      sanitizeTerminalText(this.options.workspaceDirectory ?? process.cwd(), { preserveSgr: false })
+    );
+    const timing = text
       ? this.activity ? this.theme.accent(text) : this.theme.muted(text)
       : "";
+    const left = this.turnStatusDirectory
+      ? timing
+        ? `${timing}${this.theme.muted(` ─ ${this.turnStatusDirectory}`)}`
+        : this.theme.muted(this.turnStatusDirectory)
+      : timing;
     const goalText = goalStatusText(this.goal);
     const goalLabel = goalStatusLabel(this.goal);
     const goalStyle = this.goal?.status === "complete"

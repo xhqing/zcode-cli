@@ -48,6 +48,20 @@ function boxRule(prefix: "┌" | "└", width: number): string {
   return `${prefix}${content}${"─".repeat(Math.max(0, width - 1 - visibleWidth(content)))}`;
 }
 
+/** Collapse the home directory prefix to "~", the way shell prompts do. */
+export function abbreviateWorkspaceDirectory(workspace: string): string {
+  const home = homedir();
+  if (!home || home === "/") return workspace;
+  const prefix = home.endsWith("/") ? home.slice(0, -1) : home;
+  if (workspace === prefix) return "~";
+  for (const separator of ["/", "\\"]) {
+    if (workspace.startsWith(`${prefix}${separator}`)) {
+      return `~${workspace.slice(prefix.length)}`;
+    }
+  }
+  return workspace;
+}
+
 export class WelcomeBanner implements Component {
   private readonly branch?: string;
   private readonly distributionVersion?: string;
@@ -124,16 +138,7 @@ export class WelcomeBanner implements Component {
 
   /** Collapse the home directory prefix to "~", the way shell prompts do. */
   private displayWorkspace(): string {
-    const home = homedir();
-    if (!home || home === "/") return this.workspace;
-    const prefix = home.endsWith("/") ? home.slice(0, -1) : home;
-    if (this.workspace === prefix) return "~";
-    for (const separator of ["/", "\\"]) {
-      if (this.workspace.startsWith(`${prefix}${separator}`)) {
-        return `~${this.workspace.slice(prefix.length)}`;
-      }
-    }
-    return this.workspace;
+    return abbreviateWorkspaceDirectory(this.workspace);
   }
 
   private locationLine(width: number): string {
