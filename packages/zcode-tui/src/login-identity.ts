@@ -5,6 +5,8 @@ export interface LoginIdentity {
   kind: "oauth" | "named" | "apiKey" | "signedOut";
   /** OAuth account name, a key-mapped name, or the masked API key. */
   label: string;
+  /** Masked key for the "named" kind — keeps the display distinguishable across accounts. */
+  keyMasked?: string;
 }
 
 /**
@@ -20,11 +22,30 @@ export async function readLoginIdentity(
 ): Promise<LoginIdentity | undefined> {
   const snapshot = await readLoginIdentitySnapshot(env).catch(() => undefined);
   if (!snapshot) return undefined;
-  return { kind: snapshot.kind, label: snapshot.label };
+  return { kind: snapshot.kind, label: snapshot.label, ...(snapshot.keyMasked ? { keyMasked: snapshot.keyMasked } : {}) };
 }
 
-/** Banner text for the identity line, e.g. "Signed in as alice", "API key 916c…e2f1" or "Not signed in". */
+/**
+ * Banner text for the identity line: "Signed in as alice" for an OAuth
+ * account (the one identity the system truly knows), "API key <name>
+ * (<masked>)" / "API key 916c…e2f1" for key sign-ins — a mapped name is a
+ * user-chosen alias two accounts can share, so the masked key rides along —
+ * and "Not signed in" otherwise.
+ */
 export function loginIdentityText(identity: LoginIdentity): string {
   if (identity.kind === "signedOut") return "Not signed in";
-  return identity.kind === "apiKey" ? `API key ${identity.label}` : `Signed in as ${identity.label}`;
+  if (identity.kind === "oauth") return `Signed in as ${identity.label}`;
+  if (identity.kind === "named" && identity.keyMasked) return `API key ${identity.label} (${identity.keyMasked})`;
+  return `API key ${identity.label}`;
+}
+
+/**
+ * BigModel login commands: neither the OAuth flow nor the pasted-key variant
+ * ever learns the account name (the upstream runtime discards it), so the
+ * user name is collected up front and bound to the landed key after the
+ * login. Z.AI logins are excluded — the OAuth flow stores the account name
+ * itself.
+ */
+export function shouldPromptForLoginUserName(command: string): boolean {
+  return /^\/login\s+bigmodel-coding-plan(?:-api-key)?(?:\s|$)/u.test(command);
 }

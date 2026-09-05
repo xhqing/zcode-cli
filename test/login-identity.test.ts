@@ -8,7 +8,8 @@ import { describe, expect, test } from "bun:test";
 import { bigmodelUsersPath } from "../src/bigmodel-users.ts";
 import {
   loginIdentityText,
-  readLoginIdentity
+  readLoginIdentity,
+  shouldPromptForLoginUserName
 } from "../packages/zcode-tui/src/login-identity.ts";
 
 const credentialSecret = "test-credential-secret";
@@ -219,6 +220,57 @@ describe("readLoginIdentity", () => {
   });
 });
 
+describe("readLoginIdentity key sign-in", () => {
+  test("an official-slot API key without a vault token shows the masked key", async () => {
+    await withFixture(
+      {
+        config: {
+          model: { main: "bigmodel/glm-5.3" },
+          provider: { bigmodel: { options: { apiKey: "916cbd2f-example-key-value-e2f1" } } }
+        }
+      },
+      async (env) => {
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+      }
+    );
+  });
+
+  test("an official-slot key with a mapping shows the mapped name", async () => {
+    await withFixture(
+      {
+        config: {
+          model: { main: "bigmodel/glm-5.3" },
+          provider: { bigmodel: { options: { apiKey: "916cbd2f-example-key-value-e2f1" } } }
+        }
+      },
+      async (env) => {
+        await writeFile(
+          bigmodelUsersPath(env),
+          JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
+        );
+        expect(await readLoginIdentity(env)).toEqual({ kind: "named", label: "Work account", keyMasked: "916c…e2f1" });
+      }
+    );
+  });
+
+  test("the key sign-in wins while model.main points at the custom-provider slot", async () => {
+    await withFixture(
+      {
+        config: {
+          model: { main: "env-bigmodel/glm-5.3" },
+          provider: {
+            bigmodel: { options: { apiKey: "916cbd2f-example-key-value-e2f1" } },
+            "env-bigmodel": { options: { apiKey: "916cbd2f-example-key-value-e2f1" } }
+          }
+        }
+      },
+      async (env) => {
+        expect(await readLoginIdentity(env)).toEqual({ kind: "apiKey", label: "916c…e2f1" });
+      }
+    );
+  });
+});
+
 describe("readLoginIdentity key-name mapping", () => {
   test("shows the mapped account name for a bigmodel API key", async () => {
     await withFixture(
@@ -231,7 +283,7 @@ describe("readLoginIdentity key-name mapping", () => {
           bigmodelUsersPath(env),
           JSON.stringify({ "916cbd2f-example-key-value-e2f1": "Work account" })
         );
-        expect(await readLoginIdentity(env)).toEqual({ kind: "named", label: "Work account" });
+        expect(await readLoginIdentity(env)).toEqual({ kind: "named", label: "Work account", keyMasked: "916c…e2f1" });
       }
     );
   });
@@ -296,7 +348,24 @@ describe("loginIdentityText", () => {
   test("labels OAuth accounts, API keys and the signed-out state differently", () => {
     expect(loginIdentityText({ kind: "oauth", label: "Alice" })).toBe("Signed in as Alice");
     expect(loginIdentityText({ kind: "apiKey", label: "916c…e2f1" })).toBe("API key 916c…e2f1");
-    expect(loginIdentityText({ kind: "named", label: "Work account" })).toBe("Signed in as Work account");
+    expect(loginIdentityText({ kind: "named", label: "Work account", keyMasked: "916c…e2f1" }))
+      .toBe("API key Work account (916c…e2f1)");
     expect(loginIdentityText({ kind: "signedOut", label: "" })).toBe("Not signed in");
+  });
+});
+
+describe("shouldPromptForLoginUserName", () => {
+  test("matches both BigModel login variants, with or without a pasted key", () => {
+    expect(shouldPromptForLoginUserName("/login bigmodel-coding-plan")).toBe(true);
+    expect(shouldPromptForLoginUserName("/login bigmodel-coding-plan-api-key")).toBe(true);
+    expect(shouldPromptForLoginUserName("/login bigmodel-coding-plan-api-key 916cbd2f-example")).toBe(true);
+  });
+
+  test("leaves plain /login, Z.AI logins and unrelated commands alone", () => {
+    expect(shouldPromptForLoginUserName("/login")).toBe(false);
+    expect(shouldPromptForLoginUserName("/login zai-coding-plan")).toBe(false);
+    expect(shouldPromptForLoginUserName("/login zai-coding-plan-api-key")).toBe(false);
+    expect(shouldPromptForLoginUserName("/logout")).toBe(false);
+    expect(shouldPromptForLoginUserName("/login bigmodel-coding-plans")).toBe(false);
   });
 });

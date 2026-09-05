@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--26-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--27-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 [English](README.md) | [简体中文](README_zh_hans.md) | 繁體中文
@@ -26,7 +26,7 @@
 ## 快速開始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-27.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安裝與更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-27.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-26.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-27.tgz
 ```
 
 GitHub Release 是唯一的分發渠道，本項目不發布到 npm。包名為
@@ -128,7 +128,7 @@ displayName（保留 id / 頭像等其餘字段與憑證庫相鄰條目），新
   之後可用 `zcode identity set <名稱>` 重新固定當前帳號的顯示名。
 
 針對 BigModel API key 登錄，還有一種按 key 歸屬、天然免疫帳號切換的
-方式：維護 `~/.zcode/cli/bigmodel-users.json`——BigModel 登錄通道專屬的
+方式：`~/.zcode/cli/bigmodel-users.json`——BigModel 登錄通道專屬的
 平鋪 JSON 映射表（API key → 顯示名，有意不放進 custom-provider 文件）：
 
 ```json
@@ -141,10 +141,12 @@ displayName（保留 id / 頭像等其餘字段與憑證庫相鄰條目），新
 顯示名完全由你決定、自由填寫——用戶名、key 備註名、帳號名或任意你想
 貼在這個 key 上的標籤都可以，它只是本地顯示文本。活躍 provider 的 key
 命中映射時，橫幅、狀態欄與 `zcode identity` 顯示映射的名字
-（*Signed in as …* 形式）；未命中的 key 維持脫敏顯示。由於每個 key 自帶
-顯示名，切換帳號始終顯示你給當前 key 指定的名字、無需重新固定。
-BigModel 登錄後若當前 key 尚無映射，TUI（與 `zcode login`）會打印一行
-提示指向該文件。
+（*API key \<名字\> (\<脫敏 key\>)* 形式）；未命中的 key 維持脫敏顯示。
+由於每個 key 自帶顯示名，切換帳號始終顯示你給當前 key 指定的名字、
+無需重新固定。**映射名由 TUI 代為收集**：任何經 BigModel 選項（OAuth 或
+粘貼 key）的 `/login` 都會先彈出輸入框收 user name——按 Esc 取消本次
+登錄——登錄成功後自動寫入該文件、綁定本次落盤的 key；手工編輯與登錄
+收集的條目完全等價、可混用。
 
 ## 架構
 
@@ -177,9 +179,10 @@ Ctrl+N 切換模型、空輸入 Tab 切換推理力度；回合腳註右側的�
 
 **登錄與權限。** `/login` 設置選項與掩碼 API key 輸入；脫敏的會話記錄與歷史；
 OAuth 等待態；掛起的 Z.AI 瀏覽器登錄（含終端恢復與可選的 `ZCODE_TUI_LOGIN_CMD`
-覆蓋）；啟動橫幅與狀態欄顯示登錄身份（OAuth 賬號用戶名或脫敏 API key）；
-`/logout` 清除已存的 Z.AI 與 BigModel 登錄憑證（config 裡的 API key 屬模型
-訪問配置，保留不動）；交互式工具權限審批對話框。
+覆蓋）；啟動橫幅與狀態欄顯示登錄身份（OAuth 賬號用戶名、key 映射名或脫敏
+API key——經 `/login` 粘貼的 Coding Plan key 同樣算登錄）；
+`/logout` 清除已存的 Z.AI 與 BigModel 登錄憑證（含官方槽位的 API key；
+自定義 provider 槽位屬模型訪問配置，保留不動）；交互式工具權限審批對話框。
 
 **附件與富輸出。** Ctrl+V 智能粘貼剪貼板（圖片加為附件、文本直接插入編
 輯器），`/paste-image` 專貼圖片，配鍵盤可選的附件行；緊湊的工具執行視圖（路徑、命令、進度、結果與圖片預覽）；父子 Agent 工具樹
@@ -421,9 +424,10 @@ API key、或帶自定義 provider 的直連 API key。詳細的設置步驟、�
 
 另有扁平文件方式：把帶註釋的 `custom-provider.env.example` 模板複製為
 `~/.zcode/cli/custom-provider.env` 並填入 API key 與模型 ID——無需登錄或手改
-JSON。該文件專門服務**未登錄**場景：未登錄時每次啟動先把它同步進 config.json
+JSON。該文件專門服務**未登錄**場景：未登錄（登錄指 OAuth 賬號授權，或經
+`/login` 粘貼的 key；僅寫進本文件的 key 不算）時每次啟動先把它同步進 config.json
 再拉起 runtime（同步結果寫入獨立的 `env-<provider-id>` 槽位），身份欄顯示
-「Not signed in」；`/login` 登錄後模型選擇與身份顯示自動切到登錄賬號，
+「Not signed in」；`/login` 登錄後模型選擇與身份顯示自動切到登錄身份，
 `/logout` 登出後又自動回到這份文件——全程無需手動刪除或恢復。備用 key 用編號
 變量（`ZCODE_API_KEY_2`、`ZCODE_API_KEY_3`……每變量一把 key）：多於一把時
 zcode 會啟用本地回環容災代理，某把 key 的請求被拒（401/403/429、5xx、

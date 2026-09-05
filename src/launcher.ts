@@ -41,7 +41,7 @@ import {
   isLogoutInvocation,
   printBigModelKeyNameHint,
   readLoginIdentitySnapshot,
-  readStoredOAuthLogin,
+  readSignedInProvider,
   runIdentityCommand,
   runLogoutCommand
 } from "./identity.ts";
@@ -486,7 +486,7 @@ export async function main(args: string[]): Promise<number> {
     if (migratedEnvFile) {
       console.log(`Renamed ~/.zcode/cli/.env to ${migratedEnvFile} (custom-provider configuration).`);
     }
-    const signedInProvider = await readStoredOAuthLogin();
+    const signedInProvider = await readSignedInProvider();
     const envFile = await readEnvFile();
     const apiKeys = collectApiKeys(envFile?.values ?? {});
     const upstreamBaseURL = envFile ? resolveUpstreamBaseURL(envFile.values) : undefined;
@@ -548,12 +548,13 @@ export async function main(args: string[]): Promise<number> {
     // A plain `zcode login` means the user wants to sign in — a custom
     // provider being configured is no reason to refuse (it serves the
     // signed-out state and keeps working after the next logout). Only an
-    // existing login short-circuits the command.
-    const signedIn = await readStoredOAuthLogin();
+    // existing login (OAuth token or an official-slot API key) short-circuits
+    // the command.
+    const signedIn = await readSignedInProvider();
     if (signedIn) {
       const identity = await readLoginIdentitySnapshot().catch(() => undefined);
       const label = identity && identity.kind !== "signedOut" && identity.label
-        ? ` as ${identity.label}`
+        ? ` as ${identity.label}${identity.keyMasked ? ` (${identity.keyMasked})` : ""}`
         : "";
       console.log(
         `Already signed in${label} (${signedIn}).\n`

@@ -3,7 +3,7 @@ import type { Writable } from "node:stream";
 
 import { bigmodelUsersPath, resolveBigmodelUserName } from "./bigmodel-users.ts";
 import { displayProviderId } from "./env-config.ts";
-import { userConfigPath } from "./model-access.ts";
+import { updateUserConfig, userConfigPath } from "./model-access.ts";
 import { credentialsFilePath, decryptCredential, encryptCredential, maskApiKey } from "./usage.ts";
 
 /** OAuth providers whose account name lives in the credential vault. */
@@ -98,28 +98,80 @@ export async function readStoredOAuthLogin(
   return undefined;
 }
 
+/**
+ * The official provider slot holding an API key, if any. The slot the model
+ * selection points at wins; otherwise a zai-first scan (matching the vault
+ * token-scan order). A key in an official slot is a sign-in too — the `/login`
+ * API-key variants paste it there.
+ */
+function officialProviderWithKeyIn(config: UserConfigShape | undefined): OAuthProviderId | undefined {
+  const hasKey = (providerId: string): boolean => {
+    const apiKey = config?.provider?.[providerId]?.options?.apiKey;
+    return typeof apiKey === "string" && apiKey.trim().length > 0;
+  };
+  const model = typeof config?.model?.main === "string" ? config.model.main.trim() : "";
+  const separator = model.indexOf("/");
+  const mainProvider = separator > 0 ? model.slice(0, separator) : "";
+  if ((mainProvider === "zai" || mainProvider === "bigmodel") && hasKey(mainProvider)) {
+    return mainProvider;
+  }
+  for (const providerId of ["zai", "bigmodel"] as const) {
+    if (hasKey(providerId)) return providerId;
+  }
+  return undefined;
+}
+
+/**
+ * The provider the sign-in state belongs to: a stored OAuth login (vault
+ * access token) first, then a key in an official provider slot — a pasted
+ * API key is a sign-in too, it just shows a key identity instead of an
+ * account name. Returns undefined only when neither exists, which leaves
+ * custom-provider-slot access (or nothing at all) — the signed-out state.
+ */
+export async function readSignedInProvider(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<OAuthProviderId | undefined> {
+  const oauth = await readStoredOAuthLogin(env);
+  if (oauth) return oauth;
+  try {
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfigShape;
+    return officialProviderWithKeyIn(config);
+  } catch {
+    return undefined;
+  }
+}
+
 export interface LoginIdentitySnapshot {
   /** Display-facing provider id: the `env-` slot prefix is already stripped. */
   providerId: string;
   kind: "oauth" | "named" | "apiKey" | "signedOut";
   label: string;
+  /**
+   * Masked key for the "named" kind. A key-mapped label is a user-chosen
+   * alias, not an account identity — two accounts can share one — so the
+   * masked key rides along to keep the display distinguishable after an
+   * account switch.
+   */
+  keyMasked?: string;
 }
 
 /**
  * Resolves the sign-in identity the TUI banner/status line and `zcode identity`
- * show. The stored OAuth login is the primary signal: a signed-in user is
- * identified by the account-name snapshot, then (BigModel) the key-mapped
- * name, then the masked API key — regardless of which provider entry
- * `model.main` currently points at, so a `/login` round-trip is reflected
- * immediately even while a custom-provider file still configures the model.
- * Without a login the identity is "not signed in" whenever any model access
- * exists (custom-provider file or hand-edited config); with no access at all
- * the login wizard warning covers the state and undefined is returned.
+ * show. Sign-in has two tiers: a stored OAuth login (vault access token) shows
+ * the account identity — the account-name snapshot, then (BigModel) the
+ * key-mapped name, then the masked API key — regardless of which provider
+ * entry `model.main` currently points at, so a `/login` round-trip is
+ * reflected immediately even while a custom-provider file still configures
+ * the model. Without a token, a key in an official provider slot (what the
+ * `/login` API-key variants paste) is a sign-in too and shows the key
+ * identity (mapped name, then the masked key). Only custom-provider-slot
+ * access remains "not signed in"; with no access at all the login wizard
+ * warning covers the state and undefined is returned.
  */
 export async function readLoginIdentitySnapshot(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<LoginIdentitySnapshot | undefined> {
-  const signedInProvider = await readStoredOAuthLogin(env);
+  const oauthProvider = await readStoredOAuthLogin(env);
 
   let config: UserConfigShape | undefined;
   try {
@@ -128,24 +180,27 @@ export async function readLoginIdentitySnapshot(
     config = undefined;
   }
 
+  const signedInProvider = oauthProvider ?? officialProviderWithKeyIn(config);
   if (signedInProvider) {
-    const provider = config?.provider?.[signedInProvider];
-    try {
-      const vault = await readVault(env);
-      const stored = vault[`oauth:${signedInProvider}:user_info`];
-      if (typeof stored === "string" && stored) {
-        const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
-        const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
-        if (label) return { providerId: signedInProvider, kind: "oauth", label };
+    if (oauthProvider) {
+      try {
+        const vault = await readVault(env);
+        const stored = vault[`oauth:${oauthProvider}:user_info`];
+        if (typeof stored === "string" && stored) {
+          const userInfo = JSON.parse(decryptCredential(stored, env)) as StoredUserInfo;
+          const label = identityLabel(userInfo.displayName) ?? identityLabel(userInfo.username);
+          if (label) return { providerId: oauthProvider, kind: "oauth", label };
+        }
+      } catch {
+        // Missing vault entry or unreadable credential: fall through to the key.
       }
-    } catch {
-      // Missing vault entry or unreadable credential: fall through to the key.
     }
+    const provider = config?.provider?.[signedInProvider];
     const apiKey = typeof provider?.options?.apiKey === "string" ? provider.options.apiKey.trim() : "";
     if (apiKey) {
       if (signedInProvider === "bigmodel") {
         const label = identityLabel(await resolveBigmodelUserName(apiKey, env));
-        if (label) return { providerId: signedInProvider, kind: "named", label };
+        if (label) return { providerId: signedInProvider, kind: "named", label, keyMasked: maskApiKey(apiKey) };
       }
       return { providerId: signedInProvider, kind: "apiKey", label: maskApiKey(apiKey) };
     }
@@ -279,15 +334,17 @@ const logoutVaultKeys = [
 
 export interface LogoutResult {
   credentialsPath: string;
-  /** Vault keys that were present and got deleted. */
+  /** Vault keys and official-slot config keys that were present and got deleted. */
   cleared: string[];
 }
 
 /**
- * Removes every stored sign-in credential from the shared vault. Idempotent: a
- * missing vault or already-deleted keys still report success. Config.json API
- * keys are deliberately untouched — they are model-access configuration, not
- * login state (an env-file or hand-edited key keeps working after logout).
+ * Removes every stored sign-in credential: the shared vault entries and the
+ * official `zai`/`bigmodel` slot keys in config.json (what the `/login`
+ * API-key variants paste — a key sign-in is a login, so logout clears it).
+ * Custom-provider slots (`env-*`) are untouched: that file serves the
+ * signed-out state and keeps working after the logout. Idempotent: a missing
+ * vault or already-deleted keys still report success.
  */
 export async function clearOAuthLoginCredentials(
   env: NodeJS.ProcessEnv = process.env
@@ -304,7 +361,20 @@ export async function clearOAuthLoginCredentials(
     }
     if (cleared.length > 0) await writeVault(vault, env);
   } catch {
-    // No vault or unreadable file: nothing was signed in.
+    // No vault or unreadable file: nothing was signed in via OAuth.
+  }
+  try {
+    await updateUserConfig((config) => {
+      const provider = config.provider as Record<string, { options?: { apiKey?: unknown } }> | undefined;
+      for (const providerId of oauthProviderIds) {
+        const apiKey = provider?.[providerId]?.options?.apiKey;
+        if (typeof apiKey !== "string" || apiKey.length === 0) continue;
+        delete provider![providerId]!.options!.apiKey;
+        cleared.push(`config:${providerId}:apiKey`);
+      }
+    }, env);
+  } catch {
+    // No readable config: no official-slot key to clear.
   }
   return { credentialsPath, cleared };
 }
@@ -358,8 +428,12 @@ export async function runIdentityCommand(options: {
   if (identity.kind === "signedOut") {
     write("Identity: not signed in (model access via custom provider)");
     write("Log in via `zcode login` to switch the identity display to the account.");
+  } else if (identity.kind === "oauth") {
+    write(`Identity: signed in as ${identity.label}`);
+  } else if (identity.kind === "named") {
+    write(`Identity: API key ${identity.label} (${identity.keyMasked})`);
   } else {
-    write(`Identity: ${identity.kind === "apiKey" ? `API key ${identity.label}` : `signed in as ${identity.label}`}`);
+    write(`Identity: API key ${identity.label}`);
   }
   if (identity.providerId === "bigmodel" && identity.kind === "apiKey") {
     write(
@@ -376,7 +450,14 @@ async function setIdentityName(name: string, env: NodeJS.ProcessEnv, write: (lin
     return 1;
   }
   if (!(await readStoredOAuthLogin(env))) {
-    write("Error: not signed in; run `zcode login` first — the display name follows the signed-in account.");
+    if (!(await readSignedInProvider(env))) {
+      write("Error: not signed in; run `zcode login` first — the display name follows the signed-in account.");
+      return 1;
+    }
+    write(
+      "Error: signed in with an API key, not an OAuth account — `identity set` renames OAuth accounts; "
+      + `for a BigModel key, label it in ${bigmodelUsersPath(env)}.`
+    );
     return 1;
   }
   const providerId = await activeProviderId(env);

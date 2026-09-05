@@ -8,3 +8,8 @@
 ## 🟠 橙色紧急度（边界情况出错 / 防护缺口 / 口径不一致，排在红色紧急度之后计划处理）
 
 - [ ] **T2** **客户端设置保存改为「读盘合并」写入，防止用进程内存旧配置快照整体重写 `~/.zcode/cli/config.json`、冲掉外部对配置的修改（含 hooks 挂载）**。**为什么**：2026-09-04 实测事故（T1 转登材料）——一次客户端设置保存把进程内存中的旧配置快照整体写回用户级 config.json，把外部对 hooks 段的修改（DayTradingAgent 上移到用户级的两条安全 hook）静默冲掉；不修的话，任何经客户端保存设置的时点都可能无声丢配置。T1 落地后项目级 hooks 走 trust store 单源、DayTradingAgent 也将撤回用户级挂载，敞口收窄，但用户级 hooks 段及其它外部工具对 config.json 的修改仍会被冲。**做什么**：定位设置保存路径（TUI 侧 `/config` 类命令或 runtime 侧 config 写入点），把「内存快照整体写回」改为「写前读盘 → 只合并本次编辑目标字段 → 写回」，或至少保留非编辑目标的段（hooks 等）。**验证口径**：外部修改 config.json 的 hooks 段 → 经 TUI 保存任一设置 → hooks 段原样保留。（记录：2026-09-04 13:10，由 T1 同源风险提示裁定立项）
+
+## 🟢 绿色紧急度（计划类新功能实现 / 改造方案落地，按计划排期推进）
+
+- [ ] **T3** **评估 vendor runtime 升级 3.8.1 → 3.11.2（上游已领先三个 minor 版本）**。**为什么**：2026-09-05 上游调研确认官方稳定版已到 3.11.2（manifest 实测），本项目锁的 runtime 仍是 3.8.1（cliVersion 0.16.3）；中间版本含登录稳定性修复（3.11.2「修复登录态过期、授权回调失败」、3.10.1「优化登录授权流程」）、PDF / 媒体预览、插件按工作区安装等新能力。**做什么**：跑 `sync-runtime` 拉取 3.11.2 → 核对补丁链（workspace-hook trust、steer 等既有 patch 是否仍命中）→ 全量测试 + 冒烟。**边界**：BigModel 登录拿不到用户名的问题 3.11.2 未解决（凭证结构与登录流程同构，见 CHANGELOG 3.8.1-27 调研记录），升级不以此为目标。（记录：2026-09-05 22:22，上游调研后立项）
+- [ ] **T4** **调研 bigmodel「key → 账号信息」查询接口，粘 key 场景自动获取显示名**。**为什么**：2026-09-05 上游逆向发现 runtime 换 key 时调 `GET https://bigmodel.cn/api/biz/customer/getCustomerInfo`（Authorization = OAuth accessToken），响应含账号 / 机构信息但只取 organizationId / projectId 后丢弃——上游结构性不存用户名（vault 无 bigmodel user_info 槽位）；且 accessToken 不落盘，zcode-cli 无法在 runtime 流程外补调该接口。**做什么**：调研 bigmodel 开放平台是否有「API key 自查归属 / key → 账号名」的接口（key 自身鉴权），若有则粘 key 登录后自动写入 `bigmodel-users.json` 映射，替代手工维护；查官方文档优先，本地实测为辅（n=1 标注）。**验证口径**：粘 key 登录 → 横幅显示自动获取的账号名而非脱敏 key。（记录：2026-09-05 22:22，上游调研后立项）

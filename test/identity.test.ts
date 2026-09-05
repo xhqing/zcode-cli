@@ -10,7 +10,8 @@ import {
 } from "../src/usage.ts";
 import {
   bigmodelUsersPath,
-  readBigmodelUserNames
+  readBigmodelUserNames,
+  writeBigmodelUserName
 } from "../src/bigmodel-users.ts";
 import {
   clearIdentitiesWithChangedKeys,
@@ -20,6 +21,7 @@ import {
   readBigModelKeyNameHint,
   readLoginIdentitySnapshot,
   readProviderApiKeySnapshot,
+  readSignedInProvider,
   readStoredOAuthLogin,
   runIdentityCommand,
   runLogoutCommand
@@ -144,6 +146,49 @@ describe("stored OAuth login detection", () => {
   });
 });
 
+describe("sign-in provider detection", () => {
+  test("a vault token wins over an official-slot key", async () => {
+    const fx = await createFixture({
+      "oauth:zai:access_token": "enc:v1:zai-token"
+    }, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: { bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      expect(await readSignedInProvider(fx.env)).toBe("zai");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("an official-slot key is a sign-in, model selection first", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: { bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      expect(await readSignedInProvider(fx.env)).toBe("bigmodel");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("custom-provider slots and blank keys are not a sign-in", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: {
+        "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } },
+        bigmodel: { options: { apiKey: "  " } }
+      }
+    });
+    try {
+      expect(await readSignedInProvider(fx.env)).toBeUndefined();
+    } finally {
+      await fx.cleanup();
+    }
+  });
+});
+
 describe("login identity snapshot", () => {
   test("prefers the stored OAuth user_info over the API key", async () => {
     const fx = await createFixture(bigmodelLogin({
@@ -181,6 +226,66 @@ describe("login identity snapshot", () => {
     try {
       const identity = await readLoginIdentitySnapshot(fx.env);
       expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "from-token-scan" });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("an official-slot API key is a sign-in: the masked key without a mapping", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: { bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "apiKey", label: maskedKey() });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("an official-slot API key with a mapping shows the mapped name", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: { bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
+    try {
+      await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "工作账号" }));
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "named", label: "工作账号", keyMasked: maskedKey() });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("the model selection's official slot wins over the zai-first scan", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: {
+        bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } },
+        zai: { options: { apiKey: "916cee0123456789abcdefVM9e" } }
+      }
+    });
+    try {
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity?.providerId).toBe("bigmodel");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("a stored OAuth login still wins over an official-slot key", async () => {
+    const fx = await createFixture(bigmodelLogin({
+      "oauth:bigmodel:user_info": encryptedUserInfo({ username: "oauth-account" })
+    }), {
+      model: { main: "zai/glm-5.3" },
+      provider: {
+        zai: { options: { apiKey: "916cee0123456789abcdefVM9e" } }
+      }
+    });
+    try {
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "oauth", label: "oauth-account" });
     } finally {
       await fx.cleanup();
     }
@@ -238,7 +343,7 @@ describe("bigmodel key display names", () => {
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "工作账号" }));
       const identity = await readLoginIdentitySnapshot(fx.env);
-      expect(identity).toEqual({ providerId: "bigmodel", kind: "named", label: "工作账号" });
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "named", label: "工作账号", keyMasked: maskedKey() });
     } finally {
       await fx.cleanup();
     }
@@ -343,6 +448,36 @@ describe("bigmodel key display names", () => {
     }
   });
 
+  test("writeBigmodelUserName upserts one label and preserves the rest", async () => {
+    const fx = await createFixture();
+    try {
+      await writeFile(
+        bigmodelUsersPath(fx.env),
+        JSON.stringify({ "another-key": "Other account" })
+      );
+      await writeBigmodelUserName("e984bb0123456789abcdefVM9e", "工作账号", fx.env);
+      expect(await readBigmodelUserNames(fx.env)).toEqual({
+        "another-key": "Other account",
+        "e984bb0123456789abcdefVM9e": "工作账号"
+      });
+      const identity = await readLoginIdentitySnapshot(fx.env);
+      expect(identity).toEqual({ providerId: "bigmodel", kind: "named", label: "工作账号", keyMasked: maskedKey() });
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("writeBigmodelUserName rejects blank keys and names", async () => {
+    const fx = await createFixture();
+    try {
+      await expect(writeBigmodelUserName("  ", "name", fx.env)).rejects.toThrow();
+      await expect(writeBigmodelUserName("key", "", fx.env)).rejects.toThrow();
+      expect(await readBigmodelUserNames(fx.env)).toEqual({});
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
   test("zcode identity prints the mapping tip for an unnamed bigmodel key", async () => {
     const fx = await createFixture(bigmodelLogin());
     try {
@@ -356,13 +491,13 @@ describe("bigmodel key display names", () => {
     }
   });
 
-  test("zcode identity shows the mapped name without a tip", async () => {
+  test("zcode identity shows the mapped name with the masked key, without a tip", async () => {
     const fx = await createFixture(bigmodelLogin());
     try {
       await writeFile(bigmodelUsersPath(fx.env), JSON.stringify({ "e984bb0123456789abcdefVM9e": "工作账号" }));
       const code = await runIdentityCommand({ args: ["identity"], env: fx.env, output: fx.output });
       expect(code).toBe(0);
-      expect(fx.output.text()).toContain("signed in as 工作账号");
+      expect(fx.output.text()).toContain(`API key 工作账号 (${maskedKey()})`);
       expect(fx.output.text()).not.toContain("Tip:");
     } finally {
       await fx.cleanup();
@@ -431,11 +566,26 @@ describe("zcode identity set", () => {
   });
 
   test("rejects a rename while signed out", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: { "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
     try {
       const code = await runIdentityCommand({ args: ["identity", "set", "alice"], env: fx.env, output: fx.output });
       expect(code).toBe(1);
       expect(fx.output.text()).toContain("not signed in");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("rejects a rename while signed in with an API key, pointing at the mapping", async () => {
+    const fx = await createFixture();
+    try {
+      const code = await runIdentityCommand({ args: ["identity", "set", "alice"], env: fx.env, output: fx.output });
+      expect(code).toBe(1);
+      expect(fx.output.text()).toContain("signed in with an API key");
+      expect(fx.output.text()).toContain(bigmodelUsersPath(fx.env));
     } finally {
       await fx.cleanup();
     }
@@ -663,10 +813,17 @@ describe("logout", () => {
       "oauth:bigmodel:user_info": encryptedUserInfo({ username: "alice", displayName: "alice" }),
       zcodejwttoken: "enc:v1:jwt",
       zcodefeedbackclientid: "enc:v1:feedback"
+    }, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: {
+        bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } },
+        "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } }
+      }
     });
     try {
       const result = await clearOAuthLoginCredentials(fx.env);
       expect(result.cleared.sort()).toEqual([
+        "config:bigmodel:apiKey",
         "oauth:active_provider",
         "oauth:bigmodel:access_token",
         "oauth:bigmodel:refresh_token",
@@ -681,6 +838,13 @@ describe("logout", () => {
         await readFile(join(fx.home, ".zcode", "v2", "credentials.json"), "utf8")
       ) as Record<string, string>;
       expect(Object.keys(vault)).toEqual(["zcodefeedbackclientid"]);
+      const config = JSON.parse(await readFile(userConfigPath(fx.env), "utf8")) as {
+        provider: Record<string, { options?: { apiKey?: string } }>;
+      };
+      // The official-slot key is login state and cleared; the custom-provider
+      // slot keeps serving the signed-out state.
+      expect(config.provider.bigmodel?.options?.apiKey).toBeUndefined();
+      expect(config.provider["env-bigmodel"]?.options?.apiKey).toBe("e984bb0123456789abcdefVM9e");
     } finally {
       await fx.cleanup();
     }
@@ -716,7 +880,10 @@ describe("logout", () => {
   });
 
   test("already logged out reports success without rewriting", async () => {
-    const fx = await createFixture();
+    const fx = await createFixture({}, {
+      model: { main: "env-bigmodel/glm-5.3" },
+      provider: { "env-bigmodel": { options: { apiKey: "e984bb0123456789abcdefVM9e" } } }
+    });
     try {
       const code = await runLogoutCommand({ env: fx.env, output: fx.output });
       expect(code).toBe(0);

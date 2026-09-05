@@ -73,7 +73,9 @@ The custom-provider file serves the signed-out state. A plain `zcode login`
 means the user wants to sign in, so it runs even when a custom provider is
 already configured — the file keeps working after the next `/logout`. Only an
 existing login short-circuits the command (use `zcode login --oauth` to force
-a re-login).
+a re-login). A login is either a stored OAuth token in the credential vault or
+an API key in an official `zai`/`bigmodel` slot — a pasted Coding Plan key is a
+sign-in too and shows the key identity.
 
 ## Usage stats per API key
 
@@ -132,12 +134,18 @@ While signed out, every start reads the file and syncs it into `config.json`
 before the runtime boots: the file is the authority for its own
 `env-<provider-id>` provider entry and the `model` block, and the identity
 line shows "Not signed in" (`zcode identity` reports the provider with the
-`env-` prefix stripped, e.g. `bigmodel/glm-5.2`). Other providers (for example
-credentials written by an OAuth login) and every unrelated config block are
-left untouched. While signed in the sync refreshes only the provider entry —
-the login's official slot owns the model selection and the identity line
-shows the account — and after a `/logout` the file takes over again
-automatically, so it never has to be removed or restored by hand. A file
+`env-` prefix stripped, e.g. `bigmodel/glm-5.2`). Other providers and every
+unrelated config block are left untouched. Sign-in has two tiers: a stored
+OAuth token in the credential vault shows the account name, and an API key in
+an official `zai`/`bigmodel` slot (what the `/login` key options paste) shows
+the key identity — the mapped name from `~/.zcode/cli/bigmodel-users.json`
+together with the masked key for BigModel (a mapped name is a user-chosen
+alias two accounts can share, so the masked key keeps the display
+distinguishable), otherwise the masked key alone. While signed in (either tier) the sync
+refreshes only the provider entry — the login's official slot owns the model
+selection — and after a `/logout` (which also clears the official-slot keys)
+the file takes over again automatically, so it never has to be removed or
+restored by hand. A file
 without model settings is ignored, an absent file changes nothing, and invalid
 values stop startup with a clear error pointing at the offending entry.
 
@@ -234,10 +242,12 @@ The mapped value is a free-form label — the choice is entirely yours: a user
 name, a key remark, an account name, or anything else you want to see next to
 the key. It is purely local display text. A key with an entry is displayed as
 its mapped name in the TUI banner, the status line and `zcode identity`;
-unmapped keys keep the masked-key display. After a BigModel login whose key
-has no entry yet, the TUI and `zcode login` print a one-line hint pointing at
-the file. A missing or malformed file is ignored, as are non-string or blank
-entries.
+unmapped keys keep the masked-key display. **The TUI collects the name for
+you**: any `/login` that goes through a BigModel option (OAuth or pasted key)
+first prompts for a user name — Esc cancels the login — and writes it into
+this file for the key the login landed on, so the mapping stays maintained
+without hand editing. A missing or malformed file is ignored, as are
+non-string or blank entries.
 
 ### Custom provider without login
 

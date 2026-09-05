@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
+import { dirname, posix, win32 } from "node:path";
 
 /**
  * User-maintained API-key → display-name mapping for the BigModel login
@@ -67,4 +67,26 @@ export async function resolveBigmodelUserName(
 ): Promise<string | undefined> {
   const names = await readBigmodelUserNames(env);
   return names[apiKey.trim()]?.trim() || undefined;
+}
+
+/**
+ * Upserts one api-key → display-name entry, preserving every other mapping.
+ * The TUI calls this after a `/login` that collected a user name up front —
+ * the file stays the single source for key labels either way (a hand edit
+ * and a login-collected name are indistinguishable on disk).
+ */
+export async function writeBigmodelUserName(
+  apiKey: string,
+  name: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const trimmedKey = apiKey.trim();
+  const trimmedName = name.trim();
+  if (!trimmedKey || !trimmedName) throw new Error("An API key and a display name are required.");
+  const names = await readBigmodelUserNames(env);
+  names[trimmedKey] = trimmedName;
+  const path = bigmodelUsersPath(env);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(names, null, 2)}\n`, { mode: 0o600 });
+  return path;
 }

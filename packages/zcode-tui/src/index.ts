@@ -29,7 +29,12 @@ import {
   readProviderApiKeySnapshot
 } from "../../../src/identity.ts";
 import { displayModelRef } from "../../../src/env-config.ts";
-import { readLoginIdentity, type LoginIdentity } from "./login-identity.ts";
+import { resolveBigmodelUserName, writeBigmodelUserName } from "../../../src/bigmodel-users.ts";
+import {
+  readLoginIdentity,
+  shouldPromptForLoginUserName,
+  type LoginIdentity
+} from "./login-identity.ts";
 
 import {
   Container,
@@ -477,6 +482,8 @@ class ZCodeTui {
   private stopped = false;
   private activeSubmissions = 0;
   private queuedSelectionCommand?: QueuedSubmission;
+  /** Name collected before a BigModel login; bound to the landed key afterwards. */
+  private pendingLoginUserName?: string;
   private readonly inputQueue: InputQueue;
   private turnAbortController?: AbortController;
   private turnStatusDirectory?: string;
@@ -812,6 +819,60 @@ class ZCodeTui {
     );
   }
 
+  /**
+   * Collects the display name before a BigModel login runs. Neither the OAuth
+   * flow nor the pasted-key variant ever learns the account name, so the user
+   * names the sign-in up front; the name is bound to the landed key after the
+   * login (see `bindPendingLoginUserName`). Esc cancels the login.
+   */
+  private async promptLoginUserName(): Promise<string | undefined> {
+    let placeholder: string | undefined;
+    try {
+      const key = (await readProviderApiKeySnapshot()).bigmodel;
+      if (key) placeholder = (await resolveBigmodelUserName(key)) ?? undefined;
+    } catch {
+      // No readable mapping state: the prompt simply starts empty.
+    }
+    while (true) {
+      const value = await this.showTextPrompt({
+        title: "User name",
+        prompt: "Name this sign-in — the banner and status line show it as \"API key <name>\".",
+        help: "Enter a name · Esc cancels the login",
+        placeholder: placeholder ? `current: ${placeholder}` : undefined
+      });
+      if (value === null) return undefined;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed.slice(0, 64);
+      this.addNotice("A user name is required.", "warning");
+    }
+  }
+
+  /**
+   * Binds the name collected by `promptLoginUserName` to the BigModel key the
+   * login landed on (the official config slot), then repaints the identity.
+   * Without a pending name — or when no key landed (failed or cancelled
+   * login) — there is nothing to do. Runs before `clearStaleIdentityAfterLogin`
+   * so its "label this key" hint sees the freshly written mapping and stays
+   * silent.
+   */
+  private async bindPendingLoginUserName(): Promise<void> {
+    const name = this.pendingLoginUserName;
+    this.pendingLoginUserName = undefined;
+    if (!name) return;
+    try {
+      const apiKey = (await readProviderApiKeySnapshot()).bigmodel;
+      if (!apiKey) return;
+      const path = await writeBigmodelUserName(apiKey, name);
+      await this.refreshLoginIdentity();
+      this.addNotice(`Sign-in label "${name}" saved to ${path}.`, "muted");
+    } catch (error) {
+      this.addNotice(
+        `Could not save the sign-in label: ${error instanceof Error ? error.message : String(error)}.`,
+        "warning"
+      );
+    }
+  }
+
   private async runSuspendedLogin(displayInput: string, overrideCommand?: string): Promise<void> {
     this.transcript.clearSearch();
     this.transcript.clearCursor();
@@ -902,8 +963,9 @@ class ZCodeTui {
    * `/logout` handled locally instead of being forwarded to the runtime: the
    * runtime's logout only deletes the `zai` vault entries, leaving BigModel
    * OAuth tokens and the account-name snapshot (which the identity display
-   * reads) behind. Config.json API keys stay untouched — they are model-access
-   * configuration (env file or hand-edited), not login state.
+   * reads) behind. Official-slot API keys (the `/login` key variants) are
+   * cleared too — a key sign-in is a login; custom-provider slots keep
+   * serving the signed-out state.
    */
   private async handleLocalLogout(displayInput: string): Promise<void> {
     this.transcript.clearSearch();
@@ -1223,6 +1285,16 @@ class ZCodeTui {
       return;
     }
 
+    if (shouldPromptForLoginUserName(input)) {
+      // BigModel logins never learn the account name upstream — collect it
+      // before the login runs and bind it to the landed key afterwards.
+      const userName = await this.promptLoginUserName();
+      if (userName === undefined) {
+        this.addNotice("Login cancelled.", "muted");
+        return;
+      }
+      this.pendingLoginUserName = userName;
+    }
     const loginOverride = input === "/login" ? process.env.ZCODE_TUI_LOGIN_CMD?.trim() : undefined;
     if (loginOverride) {
       await this.runSuspendedLogin(submission.displayInput, loginOverride);
@@ -1343,7 +1415,10 @@ class ZCodeTui {
           callOptions
         );
         await this.handleResult(result, true, settingTargetForCommand(input));
-        if (loginKeySnapshot) await this.clearStaleIdentityAfterLogin(loginKeySnapshot);
+        if (loginKeySnapshot) {
+          await this.bindPendingLoginUserName();
+          await this.clearStaleIdentityAfterLogin(loginKeySnapshot);
+        }
         accepted = true;
       } else {
         const preparedInput = promptInput(runtimeInput, attachments);
@@ -4612,11 +4687,19 @@ class ZCodeTui {
         priority: 60
       });
     }
-    if (this.loginIdentity) {
+    if (this.loginIdentity && this.loginIdentity.kind !== "signedOut") {
       const label = sanitizeTerminalText(this.loginIdentity.label, { preserveSgr: false });
-      const prefix = this.loginIdentity.kind === "apiKey" ? "key" : "user";
+      const keyMasked = this.loginIdentity.keyMasked
+        ? sanitizeTerminalText(this.loginIdentity.keyMasked, { preserveSgr: false })
+        : undefined;
+      // A mapped name is a user-chosen key alias, not an account identity —
+      // the masked key rides along so an account switch stays visible.
+      const prefix = this.loginIdentity.kind === "oauth" ? "user" : "key";
+      const text = keyMasked && this.loginIdentity.kind === "named"
+        ? `${prefix} ${label} (${keyMasked})`
+        : `${prefix} ${label}`;
       fields.push({
-        text: this.theme.muted(`${prefix} ${label}`),
+        text: this.theme.muted(text),
         compactText: this.theme.muted(label),
         priority: 25
       });
