@@ -5,7 +5,7 @@
 ![ZCode CLI](./assets/logo.svg)
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.md)
-[![Version](https://img.shields.io/badge/Version-3.8.1--31-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.8.1--32-blue.svg)](./CHANGELOG.md)
 [![Type](https://img.shields.io/badge/Type-CLI_Tool-blue.svg)]()
 
 [English](README.md) | 简体中文 | [繁體中文](README_zh_hant.md)
@@ -26,7 +26,7 @@
 ## 快速开始
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-31.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
 zcode
 ```
 
@@ -54,9 +54,9 @@ zcode
 ## 安装与更新
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-31.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
 # 或
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-31.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
 ```
 
 GitHub Release 是唯一的分发渠道，本项目不发布到 npm。包装名为

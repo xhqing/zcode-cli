@@ -1,4 +1,4 @@
-import { displayProviderId, envProviderSlotPrefix } from "../../../src/env-config.ts";
+import { displayModelRef, displayProviderId, envProviderSlotPrefix } from "../../../src/env-config.ts";
 
 import { asString, isRecord } from "./types.ts";
 
@@ -112,12 +112,13 @@ function officialTwinId(id: string): string | undefined {
 
 /**
  * Filters out env-file slot entries whose official-slot twin is also listed.
- * While signed in, a provider also configured through custom-provider.env
- * lists its models in both the official slot and the env-file slot — the
- * runtime reports both, and pickers must show each model once (the official
- * entry wins; its id matches the displayed current model). Env-only entries
- * without an official twin stay: they are the only access path while signed
- * out.
+ * A provider also configured through custom-provider.env lists its models in
+ * both the official slot and the env-file slot — the runtime reports both, and
+ * pickers show each model once (the official entry wins; its id matches the
+ * displayed current model). Env-only entries without an official twin stay.
+ * Usability is not decided here: while signed out the official slot carries no
+ * credential, and the switch path resolves the credentialed env slot instead
+ * (`resolveModelSlotRef`), so every listed model works signed in or not.
  */
 function withoutEnvSlotTwins<T>(entries: T[], idOf: (entry: T) => string): T[] {
   const officialIds = new Set(
@@ -127,6 +128,17 @@ function withoutEnvSlotTwins<T>(entries: T[], idOf: (entry: T) => string): T[] {
     const twin = officialTwinId(idOf(entry));
     return twin === undefined || !officialIds.has(twin);
   });
+}
+
+/**
+ * Both the internal slot form (`env-<provider>/<model>`) and the display form
+ * (`<provider>/<model>`) of the current model reference. The saved config
+ * keeps the internal form — which after the env-slot-twin dedup may not match
+ * any listed id — so current-model marking matches either form.
+ */
+function currentModelIds(currentModel?: string): Set<string> {
+  if (!currentModel) return new Set();
+  return new Set([currentModel, displayModelRef(currentModel)]);
 }
 
 function extractModelOption(option: unknown): ModelOption | undefined {
@@ -150,10 +162,10 @@ function modelLabel(option: ModelOption): string {
     : option.modelId;
 }
 
-function describeModel(option: ModelOption, currentModel?: string): string | undefined {
+function describeModel(option: ModelOption, currentIds: ReadonlySet<string>): string | undefined {
   const details = [
     option.name && option.name !== option.modelId ? option.name : undefined,
-    option.id === currentModel ? "current" : undefined
+    currentIds.has(option.id) ? "current" : undefined
   ].filter((value): value is string => Boolean(value));
   return details.length > 0 ? details.join(" · ") : undefined;
 }
@@ -181,6 +193,7 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
     parsed.push(candidate);
   }
 
+  const currentIds = currentModelIds(currentModel);
   const byProvider = new Map<string, ModelOption[]>();
   for (const candidate of withoutEnvSlotTwins(parsed, (option) => option.id)) {
     const group = byProvider.get(candidate.providerId) ?? [];
@@ -196,10 +209,10 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
     const items: PickerItem[] = models.map((model) => ({
       value: model.id,
       label: modelLabel(model),
-      description: describeModel(model, currentModel),
+      description: describeModel(model, currentIds),
       command: `/model ${model.id}`
     }));
-    const currentIndex = items.findIndex((item) => item.value === currentModel);
+    const currentIndex = items.findIndex((item) => currentIds.has(item.value));
     groups.push({
       providerId,
       label,
@@ -208,8 +221,8 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
   }
 
   const providerItems: PickerItem[] = groups.map((group) => {
-    const currentInGroup = group.models.items.some((item) => item.value === currentModel);
-    const currentModelId = group.models.items.find((item) => item.value === currentModel)?.label;
+    const currentInGroup = group.models.items.some((item) => currentIds.has(item.value));
+    const currentModelId = group.models.items.find((item) => currentIds.has(item.value))?.label;
     return {
       value: group.providerId,
       label: group.label,
@@ -225,7 +238,7 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
     providers: {
       items: providerItems,
       selectedIndex: providerItems.findIndex((item) =>
-        groups[providerItems.indexOf(item)]!.models.items.some((m) => m.value === currentModel)
+        groups[providerItems.indexOf(item)]!.models.items.some((m) => currentIds.has(m.value))
       )
     },
     groups
@@ -241,12 +254,13 @@ export function modelPicker(options: unknown[], currentModel?: string): PickerSp
     records.set(id, record);
   }
 
+  const currentIds = currentModelIds(currentModel);
   const items: PickerItem[] = withoutEnvSlotTwins([...records.keys()], (id) => id).map((id) => {
     const record = records.get(id);
     const details = [
       asString(record?.name) !== id ? asString(record?.name) : undefined,
       asString(record?.alias),
-      id === currentModel ? "current" : undefined
+      currentIds.has(id) ? "current" : undefined
     ].filter((value): value is string => Boolean(value));
     return {
       value: id,
@@ -256,7 +270,7 @@ export function modelPicker(options: unknown[], currentModel?: string): PickerSp
     };
   });
 
-  const currentIndex = items.findIndex((item) => item.value === currentModel);
+  const currentIndex = items.findIndex((item) => currentIds.has(item.value));
   return { items, selectedIndex: currentIndex >= 0 ? currentIndex : 0 };
 }
 

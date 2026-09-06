@@ -198,6 +198,39 @@ describe("TUI selectors", () => {
     ]);
   });
 
+  test("marks the official twin current when the saved model points at the env slot", () => {
+    // Signed out: config.model.main keeps the internal slot form while the
+    // deduplicated picker lists the official twin — the current marking must
+    // match either form.
+    const picker = modelPicker([
+      { id: "env-bigmodel/glm-5.3", name: "Glm 5.3" },
+      { id: "env-bigmodel/glm-5-turbo", name: "Glm 5 Turbo" },
+      { id: "bigmodel/glm-5.3", name: "Glm 5.3" },
+      { id: "bigmodel/glm-5-turbo", name: "Glm 5 Turbo" }
+    ], "env-bigmodel/glm-5.3");
+
+    expect(picker.items.map((item) => item.value)).toEqual([
+      "bigmodel/glm-5.3",
+      "bigmodel/glm-5-turbo"
+    ]);
+    expect(picker.selectedIndex).toBe(0);
+    expect(picker.items[0]?.description).toContain("current");
+  });
+
+  test("provider cascade marks the current model from the env-slot form", () => {
+    const cascade = providerModelPicker([
+      { modelId: "glm-5.3", providerId: "env-bigmodel", name: "Glm 5.3" },
+      { modelId: "glm-5-turbo", providerId: "env-bigmodel", name: "Glm 5 Turbo" },
+      { modelId: "glm-5.3", providerId: "bigmodel", name: "Glm 5.3" },
+      { modelId: "glm-5-turbo", providerId: "bigmodel", name: "Glm 5 Turbo" }
+    ], "env-bigmodel/glm-5-turbo");
+
+    const group = cascade!.groups.find((g) => g.providerId === "bigmodel")!;
+    expect(group.models.items[1]?.description).toContain("current");
+    expect(group.models.selectedIndex).toBe(1);
+    expect(cascade!.providers.items[0]?.description).toContain("current: Glm 5 Turbo");
+  });
+
   test("provider cascade drops the env-file slot group when fully shadowed", () => {
     const cascade = providerModelPicker([
       { modelId: "glm-5.3", providerId: "env-bigmodel", name: "Glm 5.3" },
