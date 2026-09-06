@@ -23,10 +23,10 @@
 
 ### 变更（CI 门禁精简，Hopper）
 
-- **PR 门禁 CI 从「完整发布构建」瘦身为「装依赖 + 全量测试 + typecheck」，并移除 push 到 main 的重复触发**（.github/workflows/ci.yml，由 Hopper（TestEngineerAgent）按 CI 维护职责调整）。
+- **PR 门禁 CI 从「完整发布构建」瘦身为「装依赖 + runtime 缓存 + 全量测试 + typecheck」，并移除 push 到 main 的重复触发**（.github/workflows/ci.yml、test/release-workflows.test.ts，由 Hopper（TestEngineerAgent）按 CI 维护职责调整）。
   - 为什么改：① 实测 dev 分支一次 CI 耗时 4 分 20 秒，其中 `release:build`（含 sync-runtime 从 GitHub 下载官方 runtime）占 3 分 56 秒（90%）——下载 runtime、打包安装测试是发布准备而非回归门禁必需，发布链 `publish.yml` 已有完整兜底；② PR 合并后 main 的 push 触发再跑一遍同内容属高度冗余（strict + enforce_admins 体系下 PR 门禁已逻辑蕴含 main 绿），且双跑使 flaky 测试的噪音概率翻倍（当日实证：冒烟测试 PR 绿 / main 红随机翻转，重跑即绿）。
-  - 改了什么：validate job 只保留 checkout（SHA 固定）→ setup-bun → `bun install --frozen-lockfile` → `bun test` → `bun run typecheck` 五步；移除 setup-node、p7zip、`release:build`、`release:pack`、npm 元数据校验（归发布流程）；触发器移除 `on: push: branches: [main]`（保留 `pull_request` + `workflow_dispatch` 手动兜底）；timeout 45 → 20 分钟；job 名 `validate` 不变（分支保护 required check 引用不变）。
-  - 验证：YAML 解析通过（bun + yaml）；本地 `tsc --noEmit` 通过；全量 `bun test` 由本 PR 的 CI 远端验证（精简后的门禁跑第一个全量）。
+  - 改了什么：validate job 精简为 checkout（SHA 固定）→ setup-node（保留——engines 钉定的 Node 22.19 是 launcher 集成测试的运行依赖）→ setup-bun → **vendor runtime 缓存**（actions/cache，key 绑定 `zcode-runtime.lock.json` + `scripts/sync-runtime.ts` 的 hash；命中直接用，miss 才 `build:tui` + `sync-runtime --lock` 下载填充——launcher 集成测试依赖 vendor 里的 runtime，而 `vendor/` 在 .gitignore 里不进仓库）→ `bun install --frozen-lockfile` → `bun test` → `bun run typecheck`；移除 `release:build`、`release:pack`、npm 元数据校验（归发布流程）；触发器移除 `on: push: branches: [main]`（保留 `pull_request` + `workflow_dispatch` 手动兜底）；timeout 45 → 20 分钟；job 名 `validate` 不变（分支保护 required check 引用不变）；test/release-workflows.test.ts 的 ci.yml 契约断言同步更新（步骤结构、缓存步骤、无 push 触发）。
+  - 验证：契约断言本地全绿；缓存 miss 首跑（含下载 runtime + build:tui）3 分 33 秒全量通过，缓存命中后续预计 ~2 分钟；合并后 Actions 无 main 的 push 运行（重复触发已消除的实证）。过程中三轮红灯的修复记录：① setup-node 误删（Node 版本不达 engines）与契约断言未同步；② vendor 不进 git、集成测试需现场下载 runtime；③ sync 前需 `build:tui`——每轮由 PR 门禁拦截后修复，未污染 main。
 
 ## 3.8.1-31 - 2026-09-06
 
