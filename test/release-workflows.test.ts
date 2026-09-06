@@ -6,6 +6,7 @@ import { parse } from "yaml";
 
 const root = resolve(import.meta.dir, "..");
 const actionShas = {
+  cache: "0057852bfaa89a56745cba8c7296529d2fc39830",
   checkout: "df4cb1c069e1874edd31b4311f1884172cec0e10",
   downloadArtifact: "d3f86a106a0bac45b974a628896c90dbdf5c8093",
   setupBun: "0c5077e51419868618aeaa5fe8019c62421857d6",
@@ -64,6 +65,8 @@ describe("release workflows", () => {
     const checkout = findAction(job.steps, "actions/checkout", actionShas.checkout);
     const setupNode = findAction(job.steps, "actions/setup-node", actionShas.setupNode);
     const setupBun = findAction(job.steps, "oven-sh/setup-bun", actionShas.setupBun);
+    const runtimeCache = findAction(job.steps, "actions/cache", actionShas.cache);
+    const fetchRuntime = job.steps.find((step) => step.name === "Fetch pinned runtime");
     const install = job.steps.find((step) => step.name === "Install dependencies");
     const test = job.steps.find((step) => step.name === "Test");
     const typecheck = job.steps.find((step) => step.name === "Typecheck");
@@ -81,6 +84,13 @@ describe("release workflows", () => {
     expect(setupNode?.with?.["node-version"]).toBe("22.19.0");
     expect(setupNode?.with?.["package-manager-cache"]).toBe(false);
     expect(setupBun).toBeDefined();
+    // The launcher/runtime integration tests need the vendored runtime; it is
+    // cached by lock file + patch script hash and only downloaded on a miss.
+    expect(runtimeCache?.with?.path).toBe("vendor");
+    expect(runtimeCache?.with?.key).toContain("zcode-runtime.lock.json");
+    expect(runtimeCache?.with?.key).toContain("scripts/sync-runtime.ts");
+    expect(fetchRuntime?.if).toContain("cache-hit != 'true'");
+    expect(fetchRuntime?.run).toContain("bun scripts/sync-runtime.ts --lock zcode-runtime.lock.json");
     expect(install?.run).toBe("bun install --frozen-lockfile");
     expect(test?.run).toBe("bun test");
     expect(typecheck?.run).toBe("bun run typecheck");
