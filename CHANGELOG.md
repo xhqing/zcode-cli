@@ -2,6 +2,16 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-31 - 2026-09-06
+
+### 变更
+
+- **`/model` 模型选择列表去重：同一 provider 的 env 槽条目（`env-<provider>/<model>`）在官方无前缀条目（`<provider>/<model>`）同时存在时不再显示**（packages/zcode-tui/src/selectors.ts、test/selectors.test.ts，版本号 bump 至 3.8.1-31：VERSION、package.json、test/update.test.ts、三版 README 徽章与安装 URL）。
+  - 为什么改：用户报告（附截图）`/model` 列表出现六个选项，其中 `env-bigmodel/glm-5.3`、`env-bigmodel/glm-5-turbo`、`env-bigmodel/glm-5.3-flash` 三个带 env 前缀的条目与 `bigmodel/glm-5.3` 等三个无前缀条目指向同一批模型，用户裁定前缀版多余、不需要存在。根因：用户同时持有官方 `bigmodel` 槽位登录（API key）与 custom-provider.env 配置的同名 provider——launcher 把后者写进 config.json 的 `env-bigmodel` 槽，上游 runtime 的 `listModels()` 把两个槽位的模型都列出来，选择列表里每个模型出现两次。
+  - 改了什么：selectors.ts 新增 `officialTwinId()`（算出 env 槽条目对应的无前缀孪生 id）与 `withoutEnvSlotTwins()`（官方孪生在列表内时剔除 env 槽条目，无孪生的 env 独有条目保留——未登录、仅 custom-provider 接入时它是唯一可选路径），`modelPicker()`（`/model` 列表与快捷循环切换共用）与 `providerModelPicker()`（`/settings → Model providers` 级联）都过这层过滤；级联里 env 槽组的模型被全部剔除后整组消失。config.json 的双槽结构、登录 / 登出流转（`switchModelBlockToOfficialProvider` 等）与 runtime 行为均不动。
+  - 溯源与防回归评估：3.8.1-26 起的 `displayProviderId()` / `displayModelRef()` 只影响「当前模型名显示」（状态栏、横幅），`/model` 列表条目此前仍用原始 id——本次把同一「env- 前缀是配置管线、不该给用户看」的原则延伸到选择列表，方向一致非回归；env 独有条目（无官方孪生）保留，未登录 custom-provider 用户的 `/model` 列表不受影响（单测有用例钉住）；`modelPicker` 原有同 id 去重、`providerModelPicker` 组内去重语义不变，只是先去重再过滤孪生。
+  - 验证：`tsc --noEmit` 通过；selectors 单测新增三用例（双槽并存剔除 env 条目且 current 标记落在官方条目、env 独有条目保留、级联全遮蔽时 env 组消失）；全量 `bun test` 696 pass / 0 fail（78 files）；TUI 冒烟 5 项全过（`build:tui` 重建后 vendor 内 `@zcode/tui` 副本按 `installLocalTui` 同步骤手动同步）。
+
 ## 3.8.1-30 - 2026-09-06
 
 ### 变更

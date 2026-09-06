@@ -1,3 +1,5 @@
+import { displayProviderId, envProviderSlotPrefix } from "../../../src/env-config.ts";
+
 import { asString, isRecord } from "./types.ts";
 
 export interface PickerItem {
@@ -96,6 +98,37 @@ function parseModelRef(id: string): { providerId: string; modelId: string } | un
   return { providerId: id.slice(0, separator), modelId: id.slice(separator + 1) };
 }
 
+/**
+ * The official-slot id for an env-file slot entry: `env-<provider>/<model>`
+ * maps to `<provider>/<model>`. Ids outside env-file slots return undefined.
+ */
+function officialTwinId(id: string): string | undefined {
+  const separator = id.indexOf("/");
+  if (separator <= 0) return undefined;
+  const providerId = id.slice(0, separator);
+  if (!providerId.startsWith(envProviderSlotPrefix)) return undefined;
+  return `${displayProviderId(providerId)}${id.slice(separator)}`;
+}
+
+/**
+ * Filters out env-file slot entries whose official-slot twin is also listed.
+ * While signed in, a provider also configured through custom-provider.env
+ * lists its models in both the official slot and the env-file slot — the
+ * runtime reports both, and pickers must show each model once (the official
+ * entry wins; its id matches the displayed current model). Env-only entries
+ * without an official twin stay: they are the only access path while signed
+ * out.
+ */
+function withoutEnvSlotTwins<T>(entries: T[], idOf: (entry: T) => string): T[] {
+  const officialIds = new Set(
+    entries.map(idOf).filter((id) => officialTwinId(id) === undefined)
+  );
+  return entries.filter((entry) => {
+    const twin = officialTwinId(idOf(entry));
+    return twin === undefined || !officialIds.has(twin);
+  });
+}
+
 function extractModelOption(option: unknown): ModelOption | undefined {
   const record = isRecord(option) ? option : undefined;
   const id = extractModelId(record, option);
@@ -138,17 +171,21 @@ function providerLabel(option: ModelOption): string {
  * forms are accepted.
  */
 export function providerModelPicker(options: unknown[], currentModel?: string): ProviderModelPicker | null {
-  const byProvider = new Map<string, ModelOption[]>();
+  const parsed: ModelOption[] = [];
   const seen = new Set<string>();
 
   for (const option of options) {
-    const parsed = extractModelOption(option);
-    if (!parsed) continue;
-    if (seen.has(parsed.id)) continue;
-    seen.add(parsed.id);
-    const group = byProvider.get(parsed.providerId) ?? [];
-    group.push(parsed);
-    byProvider.set(parsed.providerId, group);
+    const candidate = extractModelOption(option);
+    if (!candidate || seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    parsed.push(candidate);
+  }
+
+  const byProvider = new Map<string, ModelOption[]>();
+  for (const candidate of withoutEnvSlotTwins(parsed, (option) => option.id)) {
+    const group = byProvider.get(candidate.providerId) ?? [];
+    group.push(candidate);
+    byProvider.set(candidate.providerId, group);
   }
 
   if (byProvider.size === 0) return null;
@@ -196,27 +233,28 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
 }
 
 export function modelPicker(options: unknown[], currentModel?: string): PickerSpec {
-  const items: PickerItem[] = [];
-  const seen = new Set<string>();
-
+  const records = new Map<string, Record<string, unknown> | undefined>();
   for (const option of options) {
     const record = isRecord(option) ? option : undefined;
     const id = asString(record?.id) ?? asString(option);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
+    if (!id || records.has(id)) continue;
+    records.set(id, record);
+  }
 
+  const items: PickerItem[] = withoutEnvSlotTwins([...records.keys()], (id) => id).map((id) => {
+    const record = records.get(id);
     const details = [
       asString(record?.name) !== id ? asString(record?.name) : undefined,
       asString(record?.alias),
       id === currentModel ? "current" : undefined
     ].filter((value): value is string => Boolean(value));
-    items.push({
+    return {
       value: id,
       label: id,
       description: details.length > 0 ? details.join(" · ") : undefined,
       command: `/model ${id}`
-    });
-  }
+    };
+  });
 
   const currentIndex = items.findIndex((item) => item.value === currentModel);
   return { items, selectedIndex: currentIndex >= 0 ? currentIndex : 0 };

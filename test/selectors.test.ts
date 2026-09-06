@@ -162,6 +162,52 @@ describe("TUI selectors", () => {
     expect(cascade!.groups[0]!.models.items).toHaveLength(1);
   });
 
+  test("drops env-file slot entries whose official-slot twin is listed", () => {
+    // Signed-in bigmodel slot plus the same provider configured through
+    // custom-provider.env: the runtime lists both; the picker shows each
+    // model once with the official (prefix-free) id.
+    const picker = modelPicker([
+      { id: "env-bigmodel/glm-5.3", name: "Glm 5.3", alias: "main" },
+      { id: "env-bigmodel/glm-5-turbo", name: "Glm 5 Turbo", alias: "lite" },
+      { id: "env-bigmodel/glm-5.3-flash" },
+      { id: "bigmodel/glm-5.3", name: "Glm 5.3", alias: "main" },
+      { id: "bigmodel/glm-5-turbo", name: "Glm 5 Turbo", alias: "lite" },
+      { id: "bigmodel/glm-5.3-flash" }
+    ], "bigmodel/glm-5.3");
+
+    expect(picker.items.map((item) => item.value)).toEqual([
+      "bigmodel/glm-5.3",
+      "bigmodel/glm-5-turbo",
+      "bigmodel/glm-5.3-flash"
+    ]);
+    expect(picker.selectedIndex).toBe(0);
+    expect(picker.items[0]?.description).toContain("current");
+  });
+
+  test("keeps env-file slot entries without an official twin", () => {
+    // Signed out, custom provider only: no prefix-free entries exist, so the
+    // env-file slot entries are the only selectable models.
+    const picker = modelPicker([
+      { id: "env-bigmodel/glm-5.3", name: "Glm 5.3" },
+      { id: "env-custom/other-model" }
+    ], "bigmodel/glm-5.3");
+
+    expect(picker.items.map((item) => item.value)).toEqual([
+      "env-bigmodel/glm-5.3",
+      "env-custom/other-model"
+    ]);
+  });
+
+  test("provider cascade drops the env-file slot group when fully shadowed", () => {
+    const cascade = providerModelPicker([
+      { modelId: "glm-5.3", providerId: "env-bigmodel", name: "Glm 5.3" },
+      { modelId: "glm-5.3", providerId: "bigmodel", name: "Glm 5.3" }
+    ], "bigmodel/glm-5.3");
+
+    expect(cascade!.providers.items.map((item) => item.value)).toEqual(["bigmodel"]);
+    expect(cascade!.groups).toHaveLength(1);
+  });
+
   test("falls back to providerName when providerLabel is absent (runtime format)", () => {
     const cascade = providerModelPicker([
       { modelId: "glm-5.2", providerId: "zai", providerName: "Z.AI" },
