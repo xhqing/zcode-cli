@@ -170,6 +170,25 @@ export async function updateUserConfig(
   }
 }
 
+/**
+ * Reads the configured main model id (`model.main`) without requiring the
+ * referenced provider slot to carry an API key — for display fallbacks where
+ * naming the selected `<provider>/<model>` matters more than access
+ * validation. Returns null when config.json is unreadable or `model.main` is
+ * missing/blank.
+ */
+export async function readConfiguredMainModel(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string | null> {
+  try {
+    const config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfig;
+    const model = typeof config.model?.main === "string" ? config.model.main.trim() : "";
+    return model || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function readConfiguredModelAccess(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ConfiguredModelAccess | null> {

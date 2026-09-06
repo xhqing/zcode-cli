@@ -3,7 +3,12 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { readConfiguredModelAccess, userConfigPath, userConfigPathHint } from "../src/model-access.ts";
+import {
+  readConfiguredMainModel,
+  readConfiguredModelAccess,
+  userConfigPath,
+  userConfigPathHint
+} from "../src/model-access.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -60,5 +65,36 @@ describe("configured model access", () => {
     expect(await readConfiguredModelAccess(env)).toBeNull();
     await writeFile(path, "not-json");
     expect(await readConfiguredModelAccess(env)).toBeNull();
+  });
+});
+
+describe("configured main model", () => {
+  test("reads model.main without requiring provider access", async () => {
+    const home = await temporaryHome();
+    const env = { HOME: home, USERPROFILE: home };
+    const path = userConfigPath(env);
+    await mkdir(join(home, ".zcode", "cli"), { recursive: true });
+    // No apiKey on the slot: readConfiguredModelAccess would reject this,
+    // but the display fallback still names the selected model.
+    await writeFile(path, JSON.stringify({
+      provider: { zai: { options: {}, models: { "glm-5.2": {} } } },
+      model: { main: "zai/glm-5.2" }
+    }));
+    expect(await readConfiguredModelAccess(env)).toBeNull();
+    expect(await readConfiguredMainModel(env)).toBe("zai/glm-5.2");
+  });
+
+  test("returns null for missing, blank, or unreadable model.main", async () => {
+    const home = await temporaryHome();
+    const env = { HOME: home, USERPROFILE: home };
+    const path = userConfigPath(env);
+    await mkdir(join(home, ".zcode", "cli"), { recursive: true });
+    await writeFile(path, JSON.stringify({ model: { main: "   " } }));
+    expect(await readConfiguredMainModel(env)).toBeNull();
+    await writeFile(path, JSON.stringify({}));
+    expect(await readConfiguredMainModel(env)).toBeNull();
+    await writeFile(path, "not-json");
+    expect(await readConfiguredMainModel(env)).toBeNull();
+    expect(await readConfiguredMainModel({ HOME: join(home, "missing"), USERPROFILE: "" })).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { basename } from "node:path";
 
 import {
   clearSetupPending,
+  readConfiguredMainModel,
   readConfiguredModelAccess,
   readSetupPending,
   readUserConfig,
@@ -642,6 +643,7 @@ class ZCodeTui {
       : undefined;
     this.ui.start();
     await this.resolveTerminalColorScheme();
+    await this.resolveStartupModel();
     this.loginIdentity = await this.readBannerIdentity();
     this.buildLayout();
     if (notificationConfigError) {
@@ -684,6 +686,27 @@ class ZCodeTui {
       }) ?? undefined;
     }
     await this.done;
+  }
+
+  /**
+   * The runtime login gate only inspects the official `zai`/`bigmodel` slots,
+   * so a boot behind an env-file slot (env-*) arrives loginRequired with no
+   * startup model metadata and the footer would fall back to "default".
+   * Resolve the model from config.json instead: full access (declared model +
+   * key) also clears the login-required boot; otherwise the configured
+   * `model.main` still names the selected `<provider>/<model>` rather than
+   * "default".
+   */
+  private async resolveStartupModel(): Promise<void> {
+    if (this.model !== "default") return;
+    const access = await readConfiguredModelAccess().catch(() => null);
+    if (access) {
+      this.model = displayModelRef(access.model);
+      if (this.loginRequired) this.setLoginRequired(false);
+      return;
+    }
+    const main = await readConfiguredMainModel().catch(() => null);
+    if (main) this.model = displayModelRef(main);
   }
 
   private async resolveTerminalColorScheme(): Promise<void> {

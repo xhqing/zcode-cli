@@ -99,8 +99,80 @@ async function filesBelow(directory: string): Promise<string[]> {
   return result;
 }
 
-async function verifyLauncherSighup(): Promise<void> {
-  if (process.platform === "win32") return;
+/**
+ * The runtime login gate only inspects the official `zai`/`bigmodel` slots,
+ * so a boot whose model access lives on an env-file slot (`env-<id>`) arrives
+ * loginRequired without startup model metadata. The footer must still name
+ * the configured model (`<provider>/<model>`, env- prefix stripped) instead
+ * of falling back to "default".
+ */
+async function verifyEnvSlotModelDisplay(): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), "zcode-cli-smoke-env-"));
+  const envSlotConfigPath = join(home, ".zcode", "cli", "config.json");
+  await mkdir(dirname(envSlotConfigPath), { recursive: true });
+  await writeFile(envSlotConfigPath, JSON.stringify({
+    provider: {
+      "env-bigmodel": {
+        options: { apiKey: "smoke-env-slot-key-not-real" },
+        models: { "glm-5.3": { name: "GLM-5.3" } }
+      }
+    },
+    model: { main: "env-bigmodel/glm-5.3", lite: "env-bigmodel/glm-5-turbo" }
+  }, null, 2));
+  const envDecoder = new TextDecoder();
+  let envOutput = "";
+  const envTerminal = new Bun.Terminal({
+    cols: 100,
+    rows: 32,
+    name: "xterm-256color",
+    data(_terminal, data) {
+      envOutput += envDecoder.decode(data, { stream: true });
+    }
+  });
+  const envChild = Bun.spawn(command, {
+    cwd: root,
+    env: {
+      ...process.env,
+      CI: "1",
+      HOME: home,
+      NO_UPDATE_NOTIFIER: "1",
+      USERPROFILE: home,
+      ZCODE_DISABLE_UPDATE_CHECK: "1",
+      TERM: "xterm-256color"
+    },
+    terminal: envTerminal
+  });
+  let envError: unknown;
+  try {
+    const startedAt = Date.now();
+    while (!/bigmodel\/glm-5\.3/i.test(plainText(envOutput))
+      && envChild.exitCode === null
+      && Date.now() - startedAt < 8_000) {
+      await Bun.sleep(25);
+    }
+    if (!/bigmodel\/glm-5\.3/i.test(plainText(envOutput))) {
+      throw new Error(`The env-slot boot did not display the configured model.\n${plainText(envOutput).slice(-2_000)}`);
+    }
+    if (/◈ default/i.test(plainText(envOutput))) {
+      throw new Error("The env-slot boot fell back to the default model label.\n" + plainText(envOutput).slice(-2_000));
+    }
+    envTerminal.write("/exit\r");
+    await Promise.race([
+      envChild.exited,
+      Bun.sleep(5_000).then(() => undefined)
+    ]);
+  } catch (error) {
+    envError = error;
+  } finally {
+    envChild.kill("SIGKILL");
+    await envChild.exited;
+    if (!envTerminal.closed) envTerminal.close();
+    await rm(home, { recursive: true, force: true });
+  }
+  if (envError) throw envError;
+}
+
+async function verifyLauncherSighup(): Promise<void> {  if (process.platform === "win32") return;
   const signalDecoder = new TextDecoder();
   let signalOutput = "";
   const signalTerminal = new Bun.Terminal({
@@ -175,6 +247,9 @@ try {
   // The first-run setup wizard opens over the composer; skip it explicitly
   // (Esc) so the rest of the scripted interaction reaches the editor.
   await sendAndWait("\x1b", "first-run setup wizard skipped", /Setup skipped/i);
+  // Before any sign-in the config still names the default model, so the
+  // footer must already show it as <provider>/<model> — never "default".
+  await waitFor("configured model in the footer before sign-in", /◈ zai\/glm-5\.2/i);
   await sendAndWait(
     "@bro",
     "runtime Plugin suggestions",
@@ -227,7 +302,7 @@ try {
   );
   await waitFor("BigModel named identity banner", /API key smoke \(/i, bigmodelSetupStart);
   await sendAndWait("/help\r", "help output", /Slash commands:|Usage:/i);
-  await sendAndWait("/mode plan\r", "plan mode", /mode switched to plan|current mode: plan|◈ default ─ ◉ plan/i);
+  await sendAndWait("/mode plan\r", "plan mode", /mode switched to plan|current mode: plan|◈ zai\/glm-5\.2 ─ ◉ plan/i);
   terminal.write("/exit\r");
 } catch (error) {
   interactionError = error;
@@ -240,6 +315,13 @@ if (!terminal.closed) terminal.close();
 if (!interactionError) {
   try {
     await verifyLauncherSighup();
+  } catch (error) {
+    interactionError = error;
+  }
+}
+if (!interactionError) {
+  try {
+    await verifyEnvSlotModelDisplay();
   } catch (error) {
     interactionError = error;
   }
@@ -314,7 +396,7 @@ if (leakedFiles.length > 0) {
 if (!/Slash commands:|Usage:/i.test(plain)) {
   throw new Error(`The /help command did not render.\n${plain.slice(-4_000)}`);
 }
-if (!/mode switched to plan|current mode: plan|◈ default ─ ◉ plan/i.test(plain)) {
+if (!/mode switched to plan|current mode: plan|◈ zai\/glm-5\.2 ─ ◉ plan/i.test(plain)) {
   throw new Error(`The /mode command did not update the TUI.\n${plain.slice(-4_000)}`);
 }
 

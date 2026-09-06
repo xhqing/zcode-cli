@@ -2,6 +2,16 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-30 - 2026-09-06
+
+### 变更
+
+- **TUI 状态栏模型名不再兜底显示「default」：启动即解析配置里的 `<provider>/<model_id>` 完整形式**（packages/zcode-tui/src/index.ts、src/model-access.ts、test/model-access.test.ts、scripts/smoke-tui.ts，版本号 bump 至 3.8.1-30：VERSION、package.json、test/update.test.ts、三版 README 徽章与安装 URL）。
+  - 为什么改：用户报告（附截图）执行 zcode 进入 TUI 后底部状态栏显示 `◇ default — ◉ yolo — …`，要求模型名必须显示 `<provider>/<model_id>`。根因：官方 runtime 的登录门只检查官方 `zai`/`bigmodel` 槽位，模型访问配在 env 文件槽（`env-<id>`，custom-provider.env）的启动会被判 loginRequired、不带任何启动模型元数据；TUI 构造函数对缺失的 initialModel 兜底为字面量 "default"，而 `run()` 启动序列没有读 config 的兜底——`handleResult` 里既有的 `readConfiguredModelAccess()` 兜底要等第一条消息提交后才触发，首屏到发消息前一直显示 "default"。
+  - 改了什么：① TUI `run()` 启动序列新增 `resolveStartupModel()`（在首帧绘制前 await 完成）：`this.model` 为 "default"（启动元数据缺失的标志）时先读 `readConfiguredModelAccess()`——命中（model.main 指向的槽位声明了该模型且带 key）则回填 `displayModelRef(access.model)` 显示并按既有语义把 loginRequired 修正为 false（与 `handleResult` / `handleLocalLogin` 的复核语义一致）；未命中则退到新增的 `readConfiguredMainModel()`（src/model-access.ts，只读 `config.json` 的 `model.main`、不要求槽位有 key）——未配置访问的 loginRequired 启动也显示配置选定的模型（如默认 `zai/glm-5.2`）而非 "default"；② 显示经 `displayModelRef()` 统一剥掉 `env-` 前缀：env 槽 `env-bigmodel/glm-5.3` 显示为 `bigmodel/glm-5.3`；③ 冒烟测试（scripts/smoke-tui.ts）：主流程新增「登录前（pristine HOME、无 key）footer 已显示 `◈ zai/glm-5.2`」断言（覆盖 main 兜底路径），新增 `verifyEnvSlotModelDisplay()` 独立段落（预写 env- 槽 + key + model.main 的 config 复刻用户场景，断言 footer 显示 `bigmodel/glm-5.3` 且全程无 `◈ default`，覆盖 access 命中路径），`/mode plan` 断言的宽松兜底分支 `◈ default` 收紧为具体模型形式防回归掩盖；④ model-access 单测新增 `readConfiguredMainModel` 两用例（无 key 也能读到 main；缺失 / 空白 / 不可读 JSON 返回 null）。
+  - 溯源与防回归评估：3.8.1-25 为 loginRequired 建立的「env 槽已配置访问就不按未配置处理」复核语义（3.8.1-28 移除警告、复核语义保留在 `handleResult`）本次只是把同一复核从「发消息后」提前到「启动时」，属补齐而非弱化；3.8.1-27 的身份口径（env- 槽访问是「未登录」，banner 身份只认官方槽 / OAuth）不动——env 槽场景 banner 仍显示「Not signed in」、状态栏模型正常显示，两者并行不矛盾（登录身份与模型可用性是两件事）；`handleResult` 既有兜底与 `modelLabel()` 行为不变，正常登录启动（官方槽 / OAuth）仍由 runtime 元数据直达、不经新路径。
+  - 验证：`tsc --noEmit` 通过；全量 `bun test` 693 pass / 0 fail（78 files）；TUI 冒烟 5 项全过（smoke-tui 含上述两处新断言与 env-slot 段、features / clear / pressure / widths 无回归）；`build:tui` 重建后 vendor 内 `@zcode/tui` 副本按 `installLocalTui` 同步骤手动同步（runtime 本体无变更）。
+
 ## 3.8.1-29 - 2026-09-06
 
 ### 变更
