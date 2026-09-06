@@ -11,6 +11,7 @@
   - 改了什么：六个新测试文件共 46 条用例，全部锁定当前行为契约——tool-group-view 10 条（成员增删、展开传播、隐藏内容、搜索文本拼接、折叠摘要的单复数 / read-search 分组 / 进行中失败中断的图标优先级、展开时空行分隔）；command 5 条（stdout/stderr 分离捕获、非零退出码、多行输出、启动失败契约）；protocol-part-view 14 条（可见性过滤、file 的 url 藏于展开态、retry/compaction/subagent/agent 渲染、搜索文本、update() 换装）；renderable 6 条（三守卫正反分支）；plugin-protocol 4 条（11 个方法名逐字锁定 + workspace 路径归一）；clipboard-text 2 条（跨平台返回契约 + darwin pbpaste 专项，linux CI 无剪贴板工具走 undefined 路径）。
   - 缺陷发现（先红后绿纪律，未修实现——修复归开发侧，已记 TODO T5）：command.test.ts 一条用例以 `test.failing` 锁定——captureCommand 在目标二进制不存在时设计意图是返回 `{ code: 1, stderr: 启动错误 }`，实测抛 `ERR_STREAM_PREMATURE_CLOSE`（error 事件后子进程流提前关闭，readText 的异步迭代先于 Promise.all reject）；影响 update（用户未装 gh）与 zai-oauth 打开浏览器的降级路径。修复后去掉 .failing 标记即可，若实现先达标 bun 会反向报错提醒。
   - 验证：全量 `bun test` 746 pass / 0 fail（84 files，含新增 6 文件 46 条）；`tsc --noEmit` 通过。
+  - 配套治理（2026-09-06 同日，Hopper 配置）：main 分支保护已启用——required status check `validate`（strict）、Require pull request before merging（0 approvals，单人可自合并）、enforce_admins、禁 force push、禁删分支。此后所有改动必须走 feature 分支 + PR、CI 绿灯才能进 main，直接 push main 会被拒绝（按 GitHub 官方文档语义：required checks 拦未验证 commit、Require PR 完全禁直接 push）。注意：本仓库是 fork（上游 kingsword09/zcode-cli），GitHub 对 fork 的 workflow 默认不随 push 自动运行——首次走 PR 前先在 Actions 页签确认 workflows 已启用，否则 PR 会等不到 `validate` 检查。
 
 ### 修复
 
