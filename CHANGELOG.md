@@ -21,6 +21,13 @@
   - 溯源与防回归评估：3.8.1-31 的去重方向（每个模型只显示一次、官方条目胜出）保持不变——修复不动 `withoutEnvSlotTwins()` 的取舍，只把「未登录时 env 槽是唯一可用路径」的事实从显示层（保留 env 独有条目）补到切换层（官方条目在运行时解析回 env 槽）；env 独有条目（无官方孪生）原样保留、原样可用；登录态（vault token 或官方槽 key）行为与 3.8.1-31 完全一致（原样走官方槽）；3.8.1-26 的「未登录时 env 文件是 model block 权威」语义不受影响——`/settings` 未登录保存写 env 槽引用，与 launcher 启动同步写的方向一致。
   - 验证：`tsc --noEmit` 通过；identity 单测新增 7 用例（未登录回退、env 槽未声明该模型原样、无带 key env 槽原样、官方槽 key 原样、vault token 原样、跨 provider 独立判定、env 引用与无斜杠别名原样），selectors 单测新增 2 用例（current 标注以 env 槽形式匹配官方孪生：flat picker 与 provider 级联）；全量 `bun test` 746 pass / 0 fail（84 files）；TUI 冒烟 5 项全过（`build:tui` 重建后 vendor 内 `@zcode/tui` 副本按 `installLocalTui` 同步骤手动同步）。
 
+### 变更（CI 门禁精简，Hopper）
+
+- **PR 门禁 CI 从「完整发布构建」瘦身为「装依赖 + 全量测试 + typecheck」，并移除 push 到 main 的重复触发**（.github/workflows/ci.yml，由 Hopper（TestEngineerAgent）按 CI 维护职责调整）。
+  - 为什么改：① 实测 dev 分支一次 CI 耗时 4 分 20 秒，其中 `release:build`（含 sync-runtime 从 GitHub 下载官方 runtime）占 3 分 56 秒（90%）——下载 runtime、打包安装测试是发布准备而非回归门禁必需，发布链 `publish.yml` 已有完整兜底；② PR 合并后 main 的 push 触发再跑一遍同内容属高度冗余（strict + enforce_admins 体系下 PR 门禁已逻辑蕴含 main 绿），且双跑使 flaky 测试的噪音概率翻倍（当日实证：冒烟测试 PR 绿 / main 红随机翻转，重跑即绿）。
+  - 改了什么：validate job 只保留 checkout（SHA 固定）→ setup-bun → `bun install --frozen-lockfile` → `bun test` → `bun run typecheck` 五步；移除 setup-node、p7zip、`release:build`、`release:pack`、npm 元数据校验（归发布流程）；触发器移除 `on: push: branches: [main]`（保留 `pull_request` + `workflow_dispatch` 手动兜底）；timeout 45 → 20 分钟；job 名 `validate` 不变（分支保护 required check 引用不变）。
+  - 验证：YAML 解析通过（bun + yaml）；本地 `tsc --noEmit` 通过；全量 `bun test` 由本 PR 的 CI 远端验证（精简后的门禁跑第一个全量）。
+
 ## 3.8.1-31 - 2026-09-06
 
 ### 变更
