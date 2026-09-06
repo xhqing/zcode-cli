@@ -41,6 +41,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y p7zip-full
           bun install --frozen-lockfile
+          bun run build:tui
           bun scripts/sync-runtime.ts --lock zcode-runtime.lock.json
 
       - name: Install dependencies

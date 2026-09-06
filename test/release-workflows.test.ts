@@ -90,6 +90,7 @@ describe("release workflows", () => {
     expect(runtimeCache?.with?.key).toContain("zcode-runtime.lock.json");
     expect(runtimeCache?.with?.key).toContain("scripts/sync-runtime.ts");
     expect(fetchRuntime?.if).toContain("cache-hit != 'true'");
+    expect(fetchRuntime?.run).toContain("bun run build:tui");
     expect(fetchRuntime?.run).toContain("bun scripts/sync-runtime.ts --lock zcode-runtime.lock.json");
     expect(install?.run).toBe("bun install --frozen-lockfile");
     expect(test?.run).toBe("bun test");
