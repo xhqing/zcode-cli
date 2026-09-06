@@ -2,6 +2,16 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-28 - 2026-09-06
+
+### 变更
+
+- **移除 TUI 顶部「Model access is not configured. / Run /login, or configure a custom provider in ~/.zcode/cli/config.json.」两行常驻警告**（packages/zcode-tui/src/index.ts，版本号 bump 至 3.8.1-28：VERSION、package.json、test/update.test.ts、三版 README 徽章与安装 URL）。
+  - 为什么改：用户裁定不要这条提示。未配置模型访问时欢迎横幅下方常驻两行黄色警告，长期占位且引导信息与 `/login` 向导重复。
+  - 改了什么：删除 `loginWarning` / `loginHelp` 两个 Text 组件、布局挂载与 `updateLoginWarning()` 方法；`loginRequired` 标志保留不动（仍驱动运行时跳过模型加载、Goal / Session usage 刷新、身份刷新时机等逻辑）。首次运行 `/login` 引导对话框内的「Model access is not configured yet.」状态说明不受影响（那是向导内的交互文案，非常驻提示）。
+  - 溯源与防回归评估：该警告曾在 3.8.1-25 配套「`loginRequired=true` 时用 `readConfiguredModelAccess()` 复核、有配置不显示」的补偿逻辑，防的是「env 槽位已配置仍误报警告」的假阳性——本改动整体移除警告后该假阳性不可能再出现，属超集而非回归；代价是真正未配置模型访问的用户启动后不再有任何引导提示（首次运行向导仍在，向导内可见状态说明），此为用户裁定的预期行为。
+  - 验证：`tsc --noEmit` 通过；全量 `bun test` 689 pass / 0 fail（78 files）；TUI 冒烟 5 项全过（smoke-tui / features / clear / pressure / widths）；`build:tui` 重建后 vendor 内 `@zcode/tui` 副本手动同步（当日 `sync:locked` 因 CDN 下载中断未走完整链路，runtime 本体无变更、仅复制新 dist，等价于 `installLocalTui` 步骤）。
+
 ## 3.8.1-27 - 2026-09-05
 
 ### 变更

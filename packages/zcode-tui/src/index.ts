@@ -563,8 +563,6 @@ class ZCodeTui {
   private loginRequired: boolean;
   private loginIdentity?: LoginIdentity;
   private welcomeBanner?: WelcomeBanner;
-  private readonly loginWarning = new Text("", 1, 0);
-  private readonly loginHelp = new Text("", 1, 0);
 
   constructor(private readonly options: TuiOptions) {
     this.animateTurnTimer = turnTimerAnimationEnabled();
@@ -714,9 +712,6 @@ class ZCodeTui {
     });
     this.ui.addChild(this.welcomeBanner);
     this.ui.addChild(new Divider("─", this.theme.muted));
-    this.ui.addChild(this.loginWarning);
-    this.ui.addChild(this.loginHelp);
-    this.updateLoginWarning();
     this.ui.addChild(new Spacer(1));
     this.ui.addChild(this.transcript);
     this.ui.addChild(this.runtimeActivity);
@@ -742,22 +737,9 @@ class ZCodeTui {
     this.editor.onSubmit = (text) => void this.submit(text);
   }
 
-  private updateLoginWarning(): void {
-    const configPath = userConfigPathHint();
-    this.loginWarning.setText(
-      this.loginRequired ? this.theme.warning("Model access is not configured.") : ""
-    );
-    this.loginHelp.setText(
-      this.loginRequired
-        ? this.theme.warning(`Run /login, or configure a custom provider in ${configPath}.`)
-        : ""
-    );
-  }
-
   private setLoginRequired(required: boolean): void {
     const changed = this.loginRequired !== required;
     this.loginRequired = required;
-    this.updateLoginWarning();
     // Refresh on every call, not just transitions: switching accounts while
     // already signed in never flips this flag, yet the identity on disk changed.
     void this.refreshLoginIdentity();
