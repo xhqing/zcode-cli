@@ -23,6 +23,7 @@ import {
   readProviderApiKeySnapshot,
   readSignedInProvider,
   readStoredOAuthLogin,
+  resolveModelSlotRef,
   runIdentityCommand,
   runLogoutCommand
 } from "../src/identity.ts";
@@ -183,6 +184,100 @@ describe("sign-in provider detection", () => {
     });
     try {
       expect(await readSignedInProvider(fx.env)).toBeUndefined();
+    } finally {
+      await fx.cleanup();
+    }
+  });
+});
+
+describe("model slot resolution", () => {
+  // The signed-out custom-provider shape: no vault login, no official-slot
+  // key, and the credentialed env slot declaring the picked model.
+  const signedOutConfig = {
+    model: { main: "env-bigmodel/glm-5.3" },
+    provider: {
+      "env-bigmodel": {
+        options: { apiKey: "e984bb0123456789abcdefVM9e" },
+        models: { "glm-5.3": { name: "Glm 5.3" }, "glm-5-turbo": { name: "Glm 5 Turbo" } }
+      }
+    }
+  };
+
+  test("falls back to the credentialed env slot while signed out", async () => {
+    const fx = await createFixture({}, signedOutConfig);
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3", fx.env)).toBe("env-bigmodel/glm-5.3");
+      expect(await resolveModelSlotRef("bigmodel/glm-5-turbo", fx.env)).toBe("env-bigmodel/glm-5-turbo");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("keeps the official reference when the env slot does not declare the model", async () => {
+    const fx = await createFixture({}, signedOutConfig);
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3-air", fx.env)).toBe("bigmodel/glm-5.3-air");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("keeps the official reference when no credentialed env slot exists", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: { "env-bigmodel": { options: { apiKey: "  " } } }
+    });
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3", fx.env)).toBe("bigmodel/glm-5.3");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("keeps the official reference when the official slot holds a key", async () => {
+    const fx = await createFixture({}, {
+      model: { main: "bigmodel/glm-5.3" },
+      provider: {
+        bigmodel: { options: { apiKey: "e984bb0123456789abcdefVM9e" } },
+        ...signedOutConfig.provider
+      }
+    });
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3", fx.env)).toBe("bigmodel/glm-5.3");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("keeps the official reference when a vault token names the provider", async () => {
+    const fx = await createFixture({
+      "oauth:bigmodel:access_token": "enc:v1:bm-token"
+    }, signedOutConfig);
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3", fx.env)).toBe("bigmodel/glm-5.3");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("falls back per provider when the login belongs to another provider", async () => {
+    const fx = await createFixture({
+      "oauth:zai:access_token": "enc:v1:zai-token"
+    }, signedOutConfig);
+    try {
+      expect(await resolveModelSlotRef("bigmodel/glm-5.3", fx.env)).toBe("env-bigmodel/glm-5.3");
+      expect(await resolveModelSlotRef("zai/glm-5.2", fx.env)).toBe("zai/glm-5.2");
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  test("returns env-slot references and non-reference input unchanged", async () => {
+    const fx = await createFixture({}, signedOutConfig);
+    try {
+      expect(await resolveModelSlotRef("env-bigmodel/glm-5.3", fx.env)).toBe("env-bigmodel/glm-5.3");
+      expect(await resolveModelSlotRef("main", fx.env)).toBe("main");
+      expect(await resolveModelSlotRef("custom/model", fx.env)).toBe("custom/model");
     } finally {
       await fx.cleanup();
     }

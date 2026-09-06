@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { Writable } from "node:stream";
 
 import { bigmodelUsersPath, resolveBigmodelUserName } from "./bigmodel-users.ts";
-import { displayProviderId } from "./env-config.ts";
+import { displayProviderId, envProviderSlotPrefix } from "./env-config.ts";
 import { updateUserConfig, userConfigPath } from "./model-access.ts";
 import { credentialsFilePath, decryptCredential, encryptCredential, maskApiKey } from "./usage.ts";
 
@@ -16,7 +16,7 @@ const maxNameLength = 64;
 
 interface UserConfigShape {
   model?: { main?: unknown };
-  provider?: Record<string, { options?: { apiKey?: unknown } } | undefined>;
+  provider?: Record<string, { models?: Record<string, unknown>; options?: { apiKey?: unknown } } | undefined>;
 }
 
 interface StoredUserInfo {
@@ -139,6 +139,47 @@ export async function readSignedInProvider(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The config-slot model reference a switch should actually target. An
+ * official-slot reference (`<provider>/<model>` for zai/bigmodel) stays as-is
+ * while that provider has a stored login — a vault token or a key pasted into
+ * the official slot. With neither, the official slot has no credential and the
+ * same provider's custom-provider slot (`env-<provider>`) is the only working
+ * path, so the reference falls back to it. This is what keeps every entry of
+ * the deduplicated /model picker usable while signed out: the picker shows the
+ * official twin, the switch targets the env slot. References already pointing
+ * at an env slot, naming a provider without a credentialed env slot, or naming
+ * a model the env slot does not declare are returned unchanged.
+ */
+export async function resolveModelSlotRef(
+  model: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const separator = model.indexOf("/");
+  if (separator <= 0 || separator === model.length - 1) return model;
+  const providerId = model.slice(0, separator);
+  if (providerId.startsWith(envProviderSlotPrefix)) return model;
+  if (await readStoredOAuthLogin(env) === providerId) return model;
+
+  let config: UserConfigShape;
+  try {
+    config = JSON.parse(await readFile(userConfigPath(env), "utf8")) as UserConfigShape;
+  } catch {
+    return model;
+  }
+  const slotApiKey = (slot: { options?: { apiKey?: unknown } } | undefined): string | undefined => {
+    const apiKey = slot?.options?.apiKey;
+    return typeof apiKey === "string" && apiKey.trim() ? apiKey : undefined;
+  };
+  if (slotApiKey(config.provider?.[providerId])) return model;
+
+  const envSlot = config.provider?.[envProviderSlotPrefix + providerId];
+  if (!slotApiKey(envSlot)) return model;
+  const modelId = model.slice(separator + 1);
+  if (!envSlot?.models || !(modelId in envSlot.models)) return model;
+  return `${envProviderSlotPrefix}${providerId}/${modelId}`;
 }
 
 export interface LoginIdentitySnapshot {

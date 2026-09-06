@@ -8,6 +8,7 @@
 ## 🟠 橙色紧急度（边界情况出错 / 防护缺口 / 口径不一致，排在红色紧急度之后计划处理）
 
 - [ ] **T2** **客户端设置保存改为「读盘合并」写入，防止用进程内存旧配置快照整体重写 `~/.zcode/cli/config.json`、冲掉外部对配置的修改（含 hooks 挂载）**。**为什么**：2026-09-04 实测事故（T1 转登材料）——一次客户端设置保存把进程内存中的旧配置快照整体写回用户级 config.json，把外部对 hooks 段的修改（DayTradingAgent 上移到用户级的两条安全 hook）静默冲掉；不修的话，任何经客户端保存设置的时点都可能无声丢配置。T1 落地后项目级 hooks 走 trust store 单源、DayTradingAgent 也将撤回用户级挂载，敞口收窄，但用户级 hooks 段及其它外部工具对 config.json 的修改仍会被冲。**做什么**：定位设置保存路径（TUI 侧 `/config` 类命令或 runtime 侧 config 写入点），把「内存快照整体写回」改为「写前读盘 → 只合并本次编辑目标字段 → 写回」，或至少保留非编辑目标的段（hooks 等）。**验证口径**：外部修改 config.json 的 hooks 段 → 经 TUI 保存任一设置 → hooks 段原样保留。（记录：2026-09-04 13:10，由 T1 同源风险提示裁定立项）
+- [ ] **T5** **修复 `captureCommand`（src/command.ts）启动失败路径抛 `ERR_STREAM_PREMATURE_CLOSE`，实现设计意图的 `{ code: 1, stderr: 启动错误 }` 降级返回**。**为什么**：2026-09-06 Hopper 补回归用例时发现（test/command.test.ts 已用 `test.failing` 锁定契约）——spawn 的 error 事件触发后子进程 stdout/stderr 流提前关闭，`readText()` 的异步迭代先于 `Promise.all` reject，整个调用抛异常而非返回结果；`launchError` 分支（`stderr || launchError`）实际永远不可达。受影响调用方：update.ts 调 `gh`（用户未装 gh 时本应优雅报 code 1 + 提示，实际未捕获异常）、zai-oauth.ts / darwin-oauth-callback.ts 打开浏览器。**做什么**（实现归开发侧）：error 路径下不迭代已关闭的流（如 readText 捕获 premature close 返回已收内容、或 error 事件后直接短路读取）。**验证口径**：`captureCommand("/nonexistent-binary", [])` 返回 `{ code: 1, stderr: 非空 }` 不抛异常；修复后去掉 test/command.test.ts 里该用例的 `.failing` 标记（bun 会先反向报错提醒）。（记录：2026-09-06 13:26，Hopper 回归防护网补缺时发现立项）
 
 ## 🟢 绿色紧急度（计划类新功能实现 / 改造方案落地，按计划排期推进）
 

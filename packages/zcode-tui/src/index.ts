@@ -27,7 +27,8 @@ import {
   clearIdentitiesWithChangedKeys,
   clearOAuthLoginCredentials,
   readBigModelKeyNameHint,
-  readProviderApiKeySnapshot
+  readProviderApiKeySnapshot,
+  resolveModelSlotRef
 } from "../../../src/identity.ts";
 import { displayModelRef } from "../../../src/env-config.ts";
 import { resolveBigmodelUserName, writeBigmodelUserName } from "../../../src/bigmodel-users.ts";
@@ -3345,7 +3346,11 @@ class ZCodeTui {
     this.settingSwitchInFlight = true;
     try {
       const previousModel = this.model;
-      const result = await this.options.setTransientModel(modelId);
+      // The picked id may be the official-slot twin of a custom-provider slot
+      // (the deduplicated picker keeps only the official entry). While that
+      // provider has no stored login, the official slot has no credential, so
+      // the switch targets the credentialed env slot instead.
+      const result = await this.options.setTransientModel(await resolveModelSlotRef(modelId));
       await this.handleResult(result, false, "model");
       const status = this.model === previousModel ? "already active" : "now";
       this.addNotice(
@@ -3389,12 +3394,17 @@ class ZCodeTui {
 
     // Preselect from the saved config value only: it keeps the internal
     // `<slot>/<model>` form this.model no longer carries (the display form
-    // has the env- prefix stripped).
+    // has the env- prefix stripped). Match either form — after the
+    // env-slot-twin dedup the listed value is the official id while the saved
+    // block may still point at the env slot, and env-only entries keep the
+    // prefixed id.
     const cascade = providerModelPicker(this.modelOptions, savedModel);
     if (!cascade || cascade.providers.items.length === 0) {
       this.addNotice("No model providers available to configure.", "muted");
       return;
     }
+    const savedModelIds = new Set(savedModel ? [savedModel, displayModelRef(savedModel)] : []);
+    const savedLiteIds = new Set(savedLite ? [savedLite, displayModelRef(savedLite)] : []);
 
     let providerIndex = cascade.providers.selectedIndex;
     while (!this.stopped) {
@@ -3417,7 +3427,7 @@ class ZCodeTui {
       let confirmed = false;
       // Track the in-progress main selection so Esc at lite returns to the
       // model the user just chose, not the saved default.
-      let mainIndex = group.models.items.findIndex((item) => item.value === savedModel);
+      let mainIndex = group.models.items.findIndex((item) => savedModelIds.has(item.value));
       if (mainIndex < 0) mainIndex = group.models.selectedIndex;
       while (!this.stopped && !confirmed) {
         // Level 2 — main model
@@ -3444,7 +3454,7 @@ class ZCodeTui {
         };
         const liteItems = [...liteCandidates, sameAsMainItem];
         const savedLiteIndex = liteItems.findIndex(
-          (item) => item.value === savedLite && item.value !== mainChoice.value
+          (item) => savedLiteIds.has(item.value) && item.value !== mainChoice.value
         );
         const liteChoice = await this.showChoice({
           title: `Select lite model · ${group.label}`,
@@ -3455,13 +3465,18 @@ class ZCodeTui {
         });
         if (!liteChoice) continue; // Esc → back to main selection (this while)
 
-        // Persist to config.json. A write failure surfaces as a notice and
-        // skips the session switch — the user can retry.
+        // Persist to config.json as the slot reference the switch actually
+        // targets: while signed out the official-slot twin resolves to the
+        // credentialed env slot (resolveModelSlotRef), keeping the saved block
+        // and the session application below on a usable slot. A write failure
+        // surfaces as a notice and skips the session switch — the user can retry.
+        const mainSlotRef = await resolveModelSlotRef(mainChoice.value);
+        const liteSlotRef = await resolveModelSlotRef(liteChoice.value);
         try {
           await updateUserConfig((config) => {
             const model = isRecord(config.model) ? config.model : {};
-            model.main = mainChoice.value;
-            model.lite = liteChoice.value;
+            model.main = mainSlotRef;
+            model.lite = liteSlotRef;
             config.model = model;
           });
         } catch (error) {
@@ -3477,7 +3492,7 @@ class ZCodeTui {
         );
 
         // Apply main model to the current session
-        await this.applySettingCommand(`/model ${mainChoice.value}`, "model");
+        await this.applySettingCommand(`/model ${mainSlotRef}`, "model");
         confirmed = true;
       }
       // Return to the settings menu after a successful cascade instead of

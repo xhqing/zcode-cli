@@ -2,6 +2,24 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-32 - 2026-09-06
+
+### 新增（回归防护网补缺：6 个测试文件 46 条用例 + 1 个缺陷锁定）
+
+- **补齐「源码有、测试无」的六个真实覆盖缺口**（test/tool-group-view.test.ts、test/command.test.ts、test/protocol-part-view.test.ts、test/renderable.test.ts、test/plugin-protocol.test.ts、test/clipboard-text.test.ts，由 Hopper（TestEngineerAgent）按回归防护职责补写；版本号 bump 留待发版流程统一处理）。
+  - 为什么改：用户要求为 zcode-cli 织回归防护网、防止新功能改坏已有功能。全量源码 ↔ 测试映射摸底发现：80 个既有测试已覆盖绝大多数模块（含经其它测试文件间接覆盖的 bigmodel-users / color-scheme / update-available-view / login-flow 导出函数），但六个模块零直接测试——tool-group-view（工具分组折叠摘要，TUI 高频视觉路径）、command（captureCommand 子进程捕获，zai-oauth / darwin-oauth-callback / update 三处依赖的基础工具）、protocol-part-view（五类协议 part 渲染，仅被 registry 测试顺带 import）、renderable（三个组件类型守卫）、plugin-protocol（插件方法名协议契约表）、clipboard-text（Ctrl+V 智能粘贴，3.8.1-23 新增功能）。
+  - 改了什么：六个新测试文件共 46 条用例，全部锁定当前行为契约——tool-group-view 10 条（成员增删、展开传播、隐藏内容、搜索文本拼接、折叠摘要的单复数 / read-search 分组 / 进行中失败中断的图标优先级、展开时空行分隔）；command 5 条（stdout/stderr 分离捕获、非零退出码、多行输出、启动失败契约）；protocol-part-view 14 条（可见性过滤、file 的 url 藏于展开态、retry/compaction/subagent/agent 渲染、搜索文本、update() 换装）；renderable 6 条（三守卫正反分支）；plugin-protocol 4 条（11 个方法名逐字锁定 + workspace 路径归一）；clipboard-text 2 条（跨平台返回契约 + darwin pbpaste 专项，linux CI 无剪贴板工具走 undefined 路径）。
+  - 缺陷发现（先红后绿纪律，未修实现——修复归开发侧，已记 TODO T5）：command.test.ts 一条用例以 `test.failing` 锁定——captureCommand 在目标二进制不存在时设计意图是返回 `{ code: 1, stderr: 启动错误 }`，实测抛 `ERR_STREAM_PREMATURE_CLOSE`（error 事件后子进程流提前关闭，readText 的异步迭代先于 Promise.all reject）；影响 update（用户未装 gh）与 zai-oauth 打开浏览器的降级路径。修复后去掉 .failing 标记即可，若实现先达标 bun 会反向报错提醒。
+  - 验证：全量 `bun test` 746 pass / 0 fail（84 files，含新增 6 文件 46 条）；`tsc --noEmit` 通过。
+
+### 修复
+
+- **未登录时 `/model` 列表选官方条目（如 `bigmodel/glm-5.3`）完全不能用：模型切换现在把无凭证的官方槽位引用解析到同 provider 的 env 槽（custom-provider）**（src/identity.ts、packages/zcode-tui/src/selectors.ts、packages/zcode-tui/src/index.ts、test/identity.test.ts、test/selectors.test.ts，版本号 bump 至 3.8.1-32：VERSION、package.json、test/update.test.ts、三版 README 徽章与安装 URL）。
+  - 为什么改：用户报告 3.8.1-31 的列表去重有 bug——`env-` 前缀条目被剔除后，未登录（无 vault 登录、官方槽无 key）时选中官方条目 `bigmodel/glm-5.3` 完全不能用，而它已是该模型在列表里的唯一路径；用户要求列表里剩下的所有模型选项不管登录与否都能用、未登录走 custom-provider 逻辑。根因：去重保留官方条目、删掉 env 槽条目，但官方 `bigmodel` 槽位归 `/login` 管、未登录时没有凭证，`setModel("bigmodel/glm-5.3")` 发给 runtime 后无 key 可用；真正带 key 的 `env-bigmodel` 槽位条目恰好被去重删掉了。
+  - 改了什么：① src/identity.ts 新增 `resolveModelSlotRef()`：官方槽引用（`<provider>/<model>`）在该 provider 有 vault 登录或官方槽 key 时原样返回；两者皆无而 `env-<provider>` 槽位带 key 且声明了该模型时回退为 env 槽引用（按 provider 独立判定——登录 zai 不影响选 bigmodel 模型时的回退）；已是 env 槽引用、env 槽未声明该模型或无带 key 的 env 槽则原样返回。② TUI 三个模型切换入口——`/model` 选择列表与快捷循环切换共用的 `switchTransientModel`（手输 `/model <provider/model>` 也汇入此处）、`/settings → Model providers` 保存后的会话应用——发桥前一律过 `resolveModelSlotRef()`；`/settings` 持久化写进 config.json 的 main/lite 同样写解析后的槽位引用，未登录时保存的块直接指向可用的 env 槽（登录后的 `switchModelBlockToOfficialProvider` 迁移语义不变）。③ selectors.ts 的 current 标注改为双形式匹配（内部槽位形式 `env-<provider>/<model>` 与显示形式 `<provider>/<model>`），修复去重后 config 保存值（env 槽形式）与列表条目（官方形式）对不上导致「current」标记与 `/settings` 预选丢失的显示回归（3.8.1-31 引入）；`/settings` 的 main/lite 预选查找同步双形式匹配。
+  - 溯源与防回归评估：3.8.1-31 的去重方向（每个模型只显示一次、官方条目胜出）保持不变——修复不动 `withoutEnvSlotTwins()` 的取舍，只把「未登录时 env 槽是唯一可用路径」的事实从显示层（保留 env 独有条目）补到切换层（官方条目在运行时解析回 env 槽）；env 独有条目（无官方孪生）原样保留、原样可用；登录态（vault token 或官方槽 key）行为与 3.8.1-31 完全一致（原样走官方槽）；3.8.1-26 的「未登录时 env 文件是 model block 权威」语义不受影响——`/settings` 未登录保存写 env 槽引用，与 launcher 启动同步写的方向一致。
+  - 验证：`tsc --noEmit` 通过；identity 单测新增 7 用例（未登录回退、env 槽未声明该模型原样、无带 key env 槽原样、官方槽 key 原样、vault token 原样、跨 provider 独立判定、env 引用与无斜杠别名原样），selectors 单测新增 2 用例（current 标注以 env 槽形式匹配官方孪生：flat picker 与 provider 级联）；全量 `bun test` 746 pass / 0 fail（84 files）；TUI 冒烟 5 项全过（`build:tui` 重建后 vendor 内 `@zcode/tui` 副本按 `installLocalTui` 同步骤手动同步）。
+
 ## 3.8.1-31 - 2026-09-06
 
 ### 变更
