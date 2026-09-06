@@ -28,7 +28,7 @@ const boxTitle = "── SYSTEM INITIATED ";
 export interface WelcomeBannerOptions {
   branch?: string;
   distributionVersion?: string;
-  /** Signed-in account or API key label; omitted when access is not configured. */
+  /** Signed-in account or API key label; omitted only when the caller has no state to show. */
   identity?: LoginIdentity;
   runtimeVersion: string;
   workspace: string;

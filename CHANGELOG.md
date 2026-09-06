@@ -2,6 +2,16 @@
 
 本项目所有值得注意的变更都记录在此文件中。
 
+## 3.8.1-29 - 2026-09-06
+
+### 变更
+
+- **欢迎横幅默认显示登录状态：任何启动状态下横幅都有一行身份状态行，不再留白**（packages/zcode-tui/src/index.ts、packages/zcode-tui/src/login-identity.ts、packages/zcode-tui/src/welcome-banner.ts、test/welcome-banner.test.ts、scripts/smoke-tui.ts，版本号 bump 至 3.8.1-29：VERSION、package.json、test/update.test.ts、三版 README 徽章与安装 URL）。
+  - 为什么改：用户报告执行 zcode 后的欢迎横幅没有任何登录状态信息，看不出当前是 Signed in 还是 Not signed in。已登录（OAuth / key）与 custom-provider 场景本就有身份行（3.8.1-26 / 27 建立的体系），唯独「未配置模型访问」的 loginRequired 启动是空白——该状态下身份被硬置为 undefined，横幅不渲染身份行；3.8.1-28 移除常驻警告前还有两行警告覆盖此状态，移除后彻底留白。
+  - 改了什么：TUI 新增 `readBannerIdentity()`——`loginRequired=true`（runtime 跳过模型加载的未登录启动）或身份快照读取失败 / 返回 undefined（完全未配置）时，兜底为 `signedOut` 身份，横幅显示「Not signed in」；启动首绘（`run()`）与登录态刷新（`refreshLoginIdentity()`）两处统一走它。状态栏 metadata 行为不变（`signedOut` 依旧不输出 user / key 字段）；快照函数 `readLoginIdentitySnapshot()` 及其 undefined 语义不动（`zcode identity` 等其它调用方不受影响，undefined 只在 TUI 横幅这一层兜底）。
+  - 溯源与防回归评估：3.8.1-28 用户裁定移除的是「引导性警告文案」（Model access is not configured. / Run /login...），本改动加的是「事实状态行」（Not signed in / Signed in as ... / API key ...）——性质不同，且本次为用户明确要求（「请加上默认登录状态信息」），不构成回归；3.8.1-26 / 27 的身份优先级（OAuth 账号名 > key 映射名 > 脱敏 key > signedOut）完全不变，仅补齐 undefined 场景的显示兜底。
+  - 验证：`tsc --noEmit` 通过；全量 `bun test` 691 pass / 0 fail（78 files；welcome-banner 新增 signedOut 身份行 wide / compact 两用例）；TUI 冒烟 5 项全过（smoke-tui 首屏新增「Not signed in」断言——全新 HOME 的 loginRequired 启动首绘即显示该行）；`build:tui` 重建后 vendor 内 `@zcode/tui` 副本按 `installLocalTui` 同步骤手动同步（runtime 本体无变更）。
+
 ## 3.8.1-28 - 2026-09-06
 
 ### 变更

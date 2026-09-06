@@ -642,7 +642,7 @@ class ZCodeTui {
       : undefined;
     this.ui.start();
     await this.resolveTerminalColorScheme();
-    this.loginIdentity = this.loginRequired ? undefined : await this.readLoginIdentitySafely();
+    this.loginIdentity = await this.readBannerIdentity();
     this.buildLayout();
     if (notificationConfigError) {
       this.addNotice(`Unable to load notification settings: ${notificationConfigError}`, "warning");
@@ -753,9 +753,19 @@ class ZCodeTui {
     return readLoginIdentity().catch(() => undefined);
   }
 
+  /**
+   * The banner always states the sign-in state: the login-required boot (no
+   * configured model access) and an unreadable identity snapshot both fall
+   * back to "Not signed in" instead of hiding the line.
+   */
+  private async readBannerIdentity(): Promise<LoginIdentity> {
+    if (this.loginRequired) return { kind: "signedOut", label: "" };
+    return (await this.readLoginIdentitySafely()) ?? { kind: "signedOut", label: "" };
+  }
+
   /** Re-reads the signed-in identity (config + credential vault) and repaints it. */
   private async refreshLoginIdentity(): Promise<void> {
-    const identity = this.loginRequired ? undefined : await this.readLoginIdentitySafely();
+    const identity = await this.readBannerIdentity();
     const unchanged = identity?.kind === this.loginIdentity?.kind
       && identity?.label === this.loginIdentity?.label;
     if (unchanged && this.welcomeBanner) return;

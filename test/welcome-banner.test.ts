@@ -21,7 +21,10 @@ function banner(width: number, color = false): string[] {
   }).render(width);
 }
 
-function identityBanner(identity: { kind: "oauth" | "apiKey"; label: string }, width: number): string[] {
+function identityBanner(
+  identity: { kind: "oauth" | "apiKey" | "signedOut"; label: string },
+  width: number
+): string[] {
   return new WelcomeBanner(createTheme(false), {
     branch: "main",
     distributionVersion: "3.3.5-2",
@@ -145,6 +148,18 @@ describe("welcome banner", () => {
       const lines = identityBanner({ kind: "oauth", label: "Alice" }, WIDE_BANNER_MIN_WIDTH - 1);
       expect(lines).toHaveLength(4);
       expect(plain(lines)).toContain("Signed in as Alice");
+    });
+
+    test("renders the signed-out state in the wide header", () => {
+      const lines = identityBanner({ kind: "signedOut", label: "" }, 80);
+      expect(lines).toHaveLength(6);
+      expect(plain(lines)).toContain("Not signed in");
+    });
+
+    test("renders the signed-out state in the compact layout too", () => {
+      const lines = identityBanner({ kind: "signedOut", label: "" }, WIDE_BANNER_MIN_WIDTH - 1);
+      expect(lines).toHaveLength(4);
+      expect(plain(lines)).toContain("Not signed in");
     });
 
     test("truncates long labels without wrapping", () => {

@@ -158,6 +158,9 @@ const timeout = setTimeout(() => {
 let interactionError: unknown;
 try {
   await waitFor("welcome screen", /ZCode/i);
+  // The pristine HOME has no credentials (loginRequired boot), so the banner
+  // must state the sign-in state from the very first paint.
+  await waitFor("signed-out banner state", /Not signed in/i);
   if (!await Bun.file(configPath).exists()) {
     throw new Error("The launcher did not create config.json before starting the TUI.");
   }

@@ -14,8 +14,8 @@ export interface LoginIdentity {
  * stored OAuth login is the primary signal, so a `/login` round-trip is
  * reflected immediately even while a custom-provider file still configures
  * the model; without a login the identity is "not signed in" whenever model
- * access exists, and undefined when nothing is configured (the login wizard
- * warning covers that state).
+ * access exists, and undefined when nothing is configured (the banner turns
+ * that undefined into "Not signed in" so the state stays visible).
  */
 export async function readLoginIdentity(
   env: NodeJS.ProcessEnv = process.env
