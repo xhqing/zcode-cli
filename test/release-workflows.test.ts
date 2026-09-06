@@ -6,6 +6,7 @@ import { parse } from "yaml";
 
 const root = resolve(import.meta.dir, "..");
 const actionShas = {
+  cache: "0057852bfaa89a56745cba8c7296529d2fc39830",
   checkout: "df4cb1c069e1874edd31b4311f1884172cec0e10",
   downloadArtifact: "d3f86a106a0bac45b974a628896c90dbdf5c8093",
   setupBun: "0c5077e51419868618aeaa5fe8019c62421857d6",
@@ -54,17 +55,23 @@ function findAction(steps: WorkflowStep[], repository: string, sha: string): Wor
 
 describe("release workflows", () => {
   test("runs read-only CI with pinned actions and cancels superseded checks", async () => {
+    // 2026-09-06 gate slimming (Hopper): the gate runs install + full tests +
+    // typecheck only — release build/pack stays in the publish workflow, and
+    // the redundant push-to-main trigger was dropped (strict required checks
+    // already guarantee a green merge). setup-node stays: the engines-pinned
+    // Node is a test dependency (launcher/runtime integration tests).
     const { source, workflow } = await readWorkflow("ci.yml");
     const job = workflow.jobs.validate!;
     const checkout = findAction(job.steps, "actions/checkout", actionShas.checkout);
     const setupNode = findAction(job.steps, "actions/setup-node", actionShas.setupNode);
     const setupBun = findAction(job.steps, "oven-sh/setup-bun", actionShas.setupBun);
+    const runtimeCache = findAction(job.steps, "actions/cache", actionShas.cache);
+    const fetchRuntime = job.steps.find((step) => step.name === "Fetch pinned runtime");
     const install = job.steps.find((step) => step.name === "Install dependencies");
-    const build = job.steps.find((step) => step.name === "Build and test");
-    const pack = job.steps.find((step) => step.name === "Pack and install-test");
-    const metadata = job.steps.find((step) => step.name === "Verify repository and npm metadata");
+    const test = job.steps.find((step) => step.name === "Test");
+    const typecheck = job.steps.find((step) => step.name === "Typecheck");
 
-    expect(workflow.on).toHaveProperty("push");
+    expect(workflow.on).not.toHaveProperty("push");
     expect(workflow.on).toHaveProperty("pull_request");
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(workflow.permissions).toEqual({ contents: "read" });
@@ -72,20 +79,26 @@ describe("release workflows", () => {
     expect(workflow.concurrency?.group).toContain("github.ref");
     expect(workflow.concurrency?.["cancel-in-progress"]).toBe(true);
     expect(job["runs-on"]).toBe("ubuntu-latest");
-    expect(job["timeout-minutes"]).toBe(45);
+    expect(job["timeout-minutes"]).toBe(20);
     expect(checkout?.with?.["persist-credentials"]).toBe(false);
     expect(setupNode?.with?.["node-version"]).toBe("22.19.0");
     expect(setupNode?.with?.["package-manager-cache"]).toBe(false);
     expect(setupBun).toBeDefined();
+    // The launcher/runtime integration tests need the vendored runtime; it is
+    // cached by lock file + patch script hash and only downloaded on a miss.
+    expect(runtimeCache?.with?.path).toBe("vendor");
+    expect(runtimeCache?.with?.key).toContain("zcode-runtime.lock.json");
+    expect(runtimeCache?.with?.key).toContain("scripts/sync-runtime.ts");
+    expect(fetchRuntime?.if).toContain("cache-hit != 'true'");
+    expect(fetchRuntime?.run).toContain("bun run build:tui");
+    expect(fetchRuntime?.run).toContain("bun scripts/sync-runtime.ts --lock zcode-runtime.lock.json");
     expect(install?.run).toBe("bun install --frozen-lockfile");
-    expect(build?.run).toBe("bun run release:build");
-    expect(pack?.run).toBe("bun run release:pack");
-    expect(metadata?.run).toContain("npm pkg fix --dry-run --json");
-    expect(metadata?.run).toContain("git diff --check");
-    expect(metadata?.run).toContain("git diff --exit-code -- package.json zcode-runtime.lock.json");
+    expect(test?.run).toBe("bun test");
+    expect(typecheck?.run).toBe("bun run typecheck");
     expect(source).not.toContain("NPM_TOKEN");
     expect(source).not.toContain("npm publish");
     expect(source).not.toContain("id-token: write");
+    expect(source).not.toContain("release:build");
   });
 
   test("prepares release PRs only from the default branch with pinned actions", async () => {
