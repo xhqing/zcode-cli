@@ -29,7 +29,7 @@ redistribute the extracted runtime before publishing a release.
 ## Quick start
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/download/v3.8.1-32/zcode-cli-3.8.1-32.tgz
 zcode
 ```
 
@@ -59,9 +59,9 @@ Reopen it anytime with `/setup`; press Esc to skip.
 ## Install and update
 
 ```bash
-npm install -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
+npm install -g https://github.com/xhqing/zcode-cli/releases/download/v3.8.1-32/zcode-cli-3.8.1-32.tgz
 # or
-bun add -g https://github.com/xhqing/zcode-cli/releases/latest/download/zcode-cli-3.8.1-32.tgz
+bun add -g https://github.com/xhqing/zcode-cli/releases/download/v3.8.1-32/zcode-cli-3.8.1-32.tgz
 ```
 
 GitHub Releases are the only distribution channel; the project does not

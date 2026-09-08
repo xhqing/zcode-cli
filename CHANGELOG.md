@@ -4,6 +4,35 @@
 
 ## 3.8.1-32 - 2026-09-06
 
+### 新增（测试用例同步：第二个验收需求组 custom-env-rename——配置文件改名 custom-provider.env → custom.env，Hopper 供例）
+
+- **`test-cases/pending/custom-env-rename/`（requirement.md + 验收用例 5 条，bun:test）——自定义供应商配置文件简化命名**（权威源 TestEngineerAgent 仓库 `cases/zcode-cli/pending/custom-env-rename/`，单向分发）。
+  - 为什么改：用户 2026-09-08 指令——按文件命名规范删冗余修饰词，`custom-provider.env` 简化为 `custom.env`。摸底：41 处代码引用（权威源 `env-config.ts` 的 `customProviderEnvFileName` 常量）、模板 `custom-provider.env.example`、README 三版与 docs 两篇文档；本机实际存在旧名文件，自动迁移为刚需（沿用 `.env` 一次性 rename 迁移的既有先例，扩展为两层 legacy 链）。
+  - 改了什么：五条验收条目——R1 默认路径改 `~/.zcode/cli/custom.env`；R2 两层 legacy 自动迁移（旧长名优先、`.env` 兜底、`ZCODE_ENV_FILE` 覆盖跳过、迁移有提示）；R3 新旧并存新名生效旧文件保留不删；R4 模板与文档全量同步（`custom.env.example` + README×3 + docs×2）；R5 解析 / 同步 / failover 语义零变化（既有单测 + 机器门禁兜底）。边界：config.json 内部 `env-<provider>` 槽位名不变，与 model-picker-env-prefix 组互不阻塞。
+  - 当前状态：pending（待开发）——5 条 3 红 2 绿（红 = R1、R2×2 待开发契约；绿 = ZCODE_ENV_FILE 既有行为锁定 + 并存终态契约锁定）。开发按 dev-workflow 独立分支进行，与本仓库另一 pending 组（model-picker-env-prefix）并行不阻塞。
+
+### 变更（v3.8.1-31 Release 标记 pre-release + 已知问题警告，2026-09-08）
+
+- **为什么改**：v3.8.1-31 存在「未登录选模型连不上上游」的严重缺陷（3.8.1-32 修复、待发布），用户已回退 3.8.1-30 使用；经用户裁定不删除该 Release（保留历史可追溯），改标 pre-release 使 Latest 指针回落。
+- **改了什么**：`gh release edit v3.8.1-31 --prerelease`——notes 顶部加英文已知问题警告（指向 3.8.1-30 的固定 tag 链接、注明 3.8.1-32 修复），Install 段的 `releases/latest/download/` 链接顺手改为固定 tag 形式（落实同日新立的安装链接规范）。实测验证：Release 列表显示 v3.8.1-31 为 Pre-release、**Latest 已回落到 v3.8.1-30**——所有 `latest/download` 链接从此不再指向坏版本。
+
+### 变更（安装链接改固定 tag 形式：三版 README + RELEASING.md，弃用 latest/download）
+
+- **为什么改**：用户 2026-09-08 裁定弃用 `releases/latest/download/zcode-cli-<版本>.tgz` 安装链接——latest 指针随每次发布移动、资产名带版本号，版本一更新历史链接必然 404（3.8.1-17、3.8.1-19 两轮「发版后下一个变更更新 URL」均未执行导致 README 链接长期 404，3.8.1-21 起改「发版前预对齐」也是权宜）；且当下 Latest Release 是 v3.8.1-31、README 资产名写着 3.8.1-32，链接此刻就是坏的。改固定 tag URL（`releases/download/v<版本>/zcode-cli-<版本>.tgz`）永指该版本资产、历史链接不失效。
+- **改了什么**：README.md / README_zh_hans.md / README_zh_hant.md 各 3 处（共 9 处）安装命令改为 `https://github.com/xhqing/zcode-cli/releases/download/v3.8.1-32/zcode-cli-3.8.1-32.tgz`；docs/RELEASING.md 安装 URL 口径段同步改写（弃 latest 理由 + 随 bump 更新的节奏说明）。关联规范落点：全局 release skill 新增「安装链接固定 tag 形式」规范、bump skill 版本对齐范围纳入固定 tag 安装命令（记 CapabilityManagerAgent CHANGELOG）。
+
+### 变更（测试用例更新：model-picker-env-prefix 需求组补 R7/R8 选择路径防护 + R9/R10 未登录过滤，防 3.8.1-31 事故复现）
+
+- **为什么改**：用户反馈 v3.8.1-31（当前 Latest Release）未登录状态下选模型后完全无法使用、连不上上游，被迫回退 v3.8.1-30 使用——正是本仓库 3.8.1-32 修复的 bug（resolveModelSlotRef）。用户要求验收用例确保此类问题不再漏网。原用例组 R1–R6 只锁「列表显示层」，没锁「选中后解析到有凭证的槽位」——3.8.1-31 事故恰是「列表显示对了、选择路径断了」的组合缺陷，两层单独看都能绿、组合起来才暴露。随后用户追加需求：未登录状态下 `/model` 不应显示需登录才能用的模型、只显示 custom-provider.env 配置的可用模型（范围经拍板为 /model 与 /settings 一并；未登录且无可用模型时显示提示）。
+- **改了什么**：`test-cases/pending/model-picker-env-prefix/` 用例组从 6 条扩到 11 条——R7（3.8.1-31 事故场景防护，随新需求改写：未登录即使 runtime 混报官方条目，列表也只含 env 槽条目且每个条目经 resolveModelSlotRef 解析到带凭证 env 槽）、R8（去前缀 env 独有条目的解析闭环：value 为 `zai/glm-4.7` 形式时解析回 env-zai 槽）、R9 两条（平铺：未登录只列 env 槽模型、官方独有型号不显示、登录态全量回归；级联：未登录官方独有型号与纯官方供应商组消失）、R10（仅官方条目时未登录 picker 为空——提示语行为由人工验收覆盖）；R1–R5 显式传 signedIn 参数。临时 HOME fixture 复刻未登录 config 形态（空 vault + 官方槽无 key + env 槽有凭证）。requirement.md 验收条目同步加 R7–R10、实现注意点补 selector 建议签名 `modelPicker / providerModelPicker(options, current, signedIn?: boolean)` 与 TUI 三个调用点的登录态取法、人工门禁明确「未登录逐条选择每个模型确认实际能对话 + 登录后官方模型回到列表」。验证：11 条 8 红 3 绿（R1–R5、R9×2、R10 红为待开发契约、R6–R8 绿为回归防护，形态符合 pending 预期）。
+
+### 新增（测试用例同步：首个验收需求组 model-picker-env-prefix，Hopper 供例）
+
+- **`test-cases/pending/model-picker-env-prefix/`（requirement.md + 验收用例 6 条，bun:test）——/model 与 /settings 模型选择器不再显示 env- 内部槽位前缀**（由 Hopper（TestEngineerAgent）按用例生产线同步进项目镜像，权威源在 TestEngineerAgent 仓库 `cases/zcode-cli/pending/model-picker-env-prefix/`，单向分发）。
+  - 为什么改：用户提需求——TUI 输入 `/model` 后不希望看到带 `env-` 前缀的选项。根因是 custom-provider.env 同步进 config.json 的内部槽位 `env-<provider>` 泄露到显示层：`/model` 平铺列表中 env 独有条目（官方槽位没有的同名模型）以原始内部 id 显示（如 `env-zai/glm-4.7`），`/settings → Model providers` 级联中同一供应商被拆成官方 + env 两个重复组。用户已拍板：去掉前缀显示、条目保留可选（非隐藏）；/model 与 /settings 两处一并修齐。
+  - 改了什么：需求组含六条验收条目（R1 平铺列表 label/value/command 无 env- 前缀、R2 env 独有条目保留可选、R3 级联合并同一供应商为一个组、R4 env 独有供应商去前缀显示、R5 current 标记与预选不回归、R6 手输 `/model <provider>/<model>` 不回归）；边界明确 config.json 内部存储不动、既有官方孪生去重保持。注意点：`test/selectors.test.ts` 的 `keeps env-file slot entries without an official twin` 锁定旧契约（env 独有条目 value 带前缀），本需求显式废弃该契约，开发随实现同步更新该测试属行为变更、不算改测试迁就实现。
+  - 当前状态：pending（待开发）——显式跑该组 5 红 1 绿（R1–R5 红为新契约占位、R6 绿为既有行为锁定，符合预期）；全量 `bun test` 752 条自动拾起（原 746 + 新 6），原有测试零回归。开发按 dev-workflow 走：开工门禁见本组 pending 用例即满足，完成后本组全绿 + passed 区不回归才可合并，合并后由 Hopper 归档验收（pending → passed）。
+
 ### 新增（回归防护网补缺：6 个测试文件 46 条用例 + 1 个缺陷锁定）
 
 - **补齐「源码有、测试无」的六个真实覆盖缺口**（test/tool-group-view.test.ts、test/command.test.ts、test/protocol-part-view.test.ts、test/renderable.test.ts、test/plugin-protocol.test.ts、test/clipboard-text.test.ts，由 Hopper（TestEngineerAgent）按回归防护职责补写；版本号 bump 留待发版流程统一处理）。

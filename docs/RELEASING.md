@@ -161,10 +161,12 @@ uploaded tarball afterwards — it is the audited preview and install-test
 artifact and remains archived on the Release.
 
 The README install URLs use
-`releases/latest/download/zcode-cli-<version>.tgz`, whose asset name must
-match the currently published latest Release exactly. After publishing a new
-version, update the three READMEs' install URLs to the new asset name in the
-next change (the URL is only downloadable once that Release exists).
+`releases/download/v<version>/zcode-cli-<version>.tgz` — a tag-pinned URL that
+always resolves to that version's asset and never breaks when a newer Release
+becomes latest. Update the three READMEs' install URLs together with the
+version bump (the URL is only downloadable once that Release exists). Do not
+use `releases/latest/download/...`: the latest pointer moves on every publish
+while the asset name carries the version, so historical links go 404.
 
 Synchronization preserves the build when the upstream App version changes. For
 example, syncing `3.3.5-12` against ZCode App `3.4.0` produces `3.4.0-12`.
