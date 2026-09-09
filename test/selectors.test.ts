@@ -184,18 +184,20 @@ describe("TUI selectors", () => {
     expect(picker.items[0]?.description).toContain("current");
   });
 
-  test("keeps env-file slot entries without an official twin", () => {
-    // Signed out, custom provider only: no prefix-free entries exist, so the
-    // env-file slot entries are the only selectable models.
+  test("keeps env-file slot entries without an official twin, prefix-free", () => {
+    // Signed out, custom provider only: the env-file slot entries are the
+    // only selectable models, displayed with the env- prefix stripped.
     const picker = modelPicker([
       { id: "env-bigmodel/glm-5.3", name: "Glm 5.3" },
       { id: "env-custom/other-model" }
     ], "bigmodel/glm-5.3");
 
     expect(picker.items.map((item) => item.value)).toEqual([
-      "env-bigmodel/glm-5.3",
-      "env-custom/other-model"
+      "bigmodel/glm-5.3",
+      "custom/other-model"
     ]);
+    expect(picker.items[0]?.command).toBe("/model bigmodel/glm-5.3");
+    expect(picker.items[0]?.description).toContain("current");
   });
 
   test("marks the official twin current when the saved model points at the env slot", () => {

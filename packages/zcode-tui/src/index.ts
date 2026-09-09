@@ -28,6 +28,7 @@ import {
   clearOAuthLoginCredentials,
   readBigModelKeyNameHint,
   readProviderApiKeySnapshot,
+  readSignedInProvider,
   resolveModelSlotRef
 } from "../../../src/identity.ts";
 import { displayModelRef } from "../../../src/env-config.ts";
@@ -3312,8 +3313,19 @@ class ZCodeTui {
    */
   private async showModelPicker(): Promise<boolean> {
     await this.refreshModelOptions();
-    const picker = modelPicker(this.modelOptions, this.model);
-    if (picker.items.length === 0) return false;
+    const signedIn = await readSignedInProvider() !== undefined;
+    const picker = modelPicker(this.modelOptions, this.model, signedIn);
+    if (picker.items.length === 0) {
+      // Signed out with no custom.env models there is nothing switchable —
+      // say so instead of opening an empty picker or passing /model through.
+      this.addNotice(
+        signedIn
+          ? "No models available to switch to."
+          : "No models available to switch to — sign in (/login) or configure ~/.zcode/cli/custom.env.",
+        "muted"
+      );
+      return true;
+    }
     const selected = await this.showChoice({
       title: "Select model",
       prompt: `Current model: ${this.model}. · session only — saved defaults are unchanged`,
@@ -3346,10 +3358,9 @@ class ZCodeTui {
     this.settingSwitchInFlight = true;
     try {
       const previousModel = this.model;
-      // The picked id may be the official-slot twin of a custom-provider slot
-      // (the deduplicated picker keeps only the official entry). While that
-      // provider has no stored login, the official slot has no credential, so
-      // the switch targets the credentialed env slot instead.
+      // The picked id is the prefix-free display form; while its provider has
+      // no stored login the official slot carries no credential, so the switch
+      // targets the credentialed custom.env slot instead (resolveModelSlotRef).
       const result = await this.options.setTransientModel(await resolveModelSlotRef(modelId));
       await this.handleResult(result, false, "model");
       const status = this.model === previousModel ? "already active" : "now";
@@ -3394,11 +3405,12 @@ class ZCodeTui {
 
     // Preselect from the saved config value only: it keeps the internal
     // `<slot>/<model>` form this.model no longer carries (the display form
-    // has the env- prefix stripped). Match either form — after the
-    // env-slot-twin dedup the listed value is the official id while the saved
-    // block may still point at the env slot, and env-only entries keep the
-    // prefixed id.
-    const cascade = providerModelPicker(this.modelOptions, savedModel);
+    // has the env- prefix stripped). Match either form — the listed values
+    // are prefix-free display ids while the saved block may still point at
+    // the env slot. Signed out, only custom.env providers have usable
+    // entries, so the cascade drops official-only providers and models.
+    const signedIn = await readSignedInProvider() !== undefined;
+    const cascade = providerModelPicker(this.modelOptions, savedModel, signedIn);
     if (!cascade || cascade.providers.items.length === 0) {
       this.addNotice("No model providers available to configure.", "muted");
       return;
@@ -4007,7 +4019,8 @@ class ZCodeTui {
   private async switchModel(): Promise<void> {
     if (!this.shortcutAvailable()) return;
     await this.refreshModelOptions();
-    const next = nextPickerValue(modelPicker(this.modelOptions, this.model), this.model);
+    const signedIn = await readSignedInProvider() !== undefined;
+    const next = nextPickerValue(modelPicker(this.modelOptions, this.model, signedIn), this.model);
     if (!next) {
       this.addNotice("No alternate model is available.", "muted");
       return;
