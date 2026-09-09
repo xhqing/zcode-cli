@@ -4,6 +4,21 @@
 
 ## 3.8.1-32 - 2026-09-06
 
+### 变更（项目迁移收尾：CLAUDE.md 子项目清单路径更新）
+
+- **`.claude/CLAUDE.md` 子项目清单中 zcode-cli、zcode-vsce 的路径由 `~/Documents/Projects/` 更新为 `~/Developer/`**。为什么改：项目现址在 `~/Developer/`（旧址已弃用，2026-09-08 迁移收尾统一对齐 main 仓库与各 worktree 的同款行）。
+
+### 变更（custom-env-rename 需求组实现落地：自定义供应商配置文件改名 custom-provider.env → custom.env，含两层存量迁移）
+
+- **为什么改**：落实 2026-09-08 用户需求（文件命名规范：删冗余修饰词）与本版本上方「测试用例同步」条目登记的 pending 需求组——`custom-provider.env` 中 `provider` 是上下文已知的冗余修饰，简化为 `custom.env`；本机实际存在旧名文件，存量自动迁移是刚需。
+- **改了什么**：
+  - `src/env-config.ts`：常量 `customProviderEnvFileName` 改名 `customEnvFileName`、值改 `custom.env`（文件名唯一权威源）；`migrateLegacyEnvFile` 由单层迁移（`.env`）扩为两层 legacy 链——`custom-provider.env` 优先、`.env` 兜底，`custom.env` 已存在则跳过（并存时旧文件保留不动）、`ZCODE_ENV_FILE` 覆盖时一切迁移跳过，一次启动至多一次 rename；头注释与 `syncEnvFileToConfig` 注释同步新名。
+  - `src/launcher.ts`：迁移提示改为 `Migrated the legacy custom-provider config to <path>.`（不再硬编码旧源名 `.env`）；`src/identity.ts` 未登录提示中的文件名同步。
+  - 模板改名 `custom-provider.env.example` → `custom.env.example`（头部注释同步两层迁移说明）；`docs/CONFIGURATION.md`（标题、锚点 `#custom-provider-file-customenv`、迁移说明）、README 三版安装段同步。
+  - 测试适配：`test/env-config.test.ts` 路径断言改新名、迁移组扩为四条（新长名迁移 / `.env` 直迁 / 两层并存取新长名且 `.env` 保留 / override 跳过）；`test/selectors.test.ts` 注释同步；`bin/zcode.js` 为构建产物随 `bun run build` 再生成。
+- **验证**：本需求组验收用例 `test-cases/pending/custom-env-rename/` 5 条全绿；全量 `bun test` 756 pass、剩余 8 fail 全部为并行需求组 model-picker-env-prefix 的待实现契约（按 dev-workflow 口径不阻塞本组）；`tsc --noEmit` 通过。
+- 当前状态：分支 `feat/custom-env-rename` 开发完成，待用户人工验收后合并回 main。
+
 ### 新增（测试用例同步：第二个验收需求组 custom-env-rename——配置文件改名 custom-provider.env → custom.env，Hopper 供例）
 
 - **`test-cases/pending/custom-env-rename/`（requirement.md + 验收用例 5 条，bun:test）——自定义供应商配置文件简化命名**（权威源 TestEngineerAgent 仓库 `cases/zcode-cli/pending/custom-env-rename/`，单向分发）。

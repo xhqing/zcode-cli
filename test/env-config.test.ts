@@ -46,9 +46,9 @@ const completeEnvFile = [
 
 describe("env file path", () => {
   test("resolves the default location and honors ZCODE_ENV_FILE", () => {
-    expect(envFilePath({ HOME: "/home/alice" }, "linux", "/fallback")).toBe("/home/alice/.zcode/cli/custom-provider.env");
+    expect(envFilePath({ HOME: "/home/alice" }, "linux", "/fallback")).toBe("/home/alice/.zcode/cli/custom.env");
     expect(envFilePath({ USERPROFILE: "C:\\Users\\Alice" }, "win32", "C:\\fallback")).toBe(
-      "C:\\Users\\Alice\\.zcode\\cli\\custom-provider.env"
+      "C:\\Users\\Alice\\.zcode\\cli\\custom.env"
     );
     expect(envFilePath({ HOME: "/home/alice", ZCODE_ENV_FILE: "/custom/zcode.env" }, "linux")).toBe(
       "/custom/zcode.env"
@@ -68,7 +68,24 @@ describe("display ids", () => {
 });
 
 describe("migrateLegacyEnvFile", () => {
-  test("renames the legacy .env once and leaves existing files alone", async () => {
+  test("renames the legacy custom-provider.env once and leaves existing files alone", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const directory = dirname(envFilePath(env));
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "custom-provider.env"), completeEnvFile);
+
+    const migrated = await migrateLegacyEnvFile(env);
+    expect(migrated).toBe(envFilePath(env));
+    await expect(readFile(join(directory, "custom-provider.env"))).rejects.toThrow();
+    expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+
+    // A second run is a no-op now that the new name exists.
+    expect(await migrateLegacyEnvFile(env)).toBeUndefined();
+    expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+  });
+
+  test("renames the original .env straight to custom.env when no newer legacy exists", async () => {
     const home = await temporaryHome();
     const env = homeEnvironment(home);
     const directory = dirname(envFilePath(env));
@@ -79,10 +96,21 @@ describe("migrateLegacyEnvFile", () => {
     expect(migrated).toBe(envFilePath(env));
     await expect(readFile(join(directory, ".env"))).rejects.toThrow();
     expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+  });
 
-    // A second run is a no-op now that the new name exists.
-    expect(await migrateLegacyEnvFile(env)).toBeUndefined();
+  test("prefers the newer custom-provider.env over .env when both are legacy", async () => {
+    const home = await temporaryHome();
+    const env = homeEnvironment(home);
+    const directory = dirname(envFilePath(env));
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, ".env"), "# original\nZCODE_MAIN_MODEL=glm-4.7\n");
+    await writeFile(join(directory, "custom-provider.env"), completeEnvFile);
+
+    const migrated = await migrateLegacyEnvFile(env);
+    expect(migrated).toBe(envFilePath(env));
     expect(await readFile(envFilePath(env), "utf8")).toBe(completeEnvFile);
+    // The older legacy file is left in place for the user to dispose of.
+    expect(await readFile(join(directory, ".env"), "utf8")).toBe("# original\nZCODE_MAIN_MODEL=glm-4.7\n");
   });
 
   test("does nothing without a legacy file and with an explicit override", async () => {
@@ -91,7 +119,7 @@ describe("migrateLegacyEnvFile", () => {
     await mkdir(dirname(envFilePath(env)), { recursive: true });
     expect(await migrateLegacyEnvFile(env)).toBeUndefined();
 
-    await writeFile(join(dirname(envFilePath(env)), ".env"), completeEnvFile);
+    await writeFile(join(dirname(envFilePath(env)), "custom-provider.env"), completeEnvFile);
     expect(await migrateLegacyEnvFile({ ...env, ZCODE_ENV_FILE: "/custom/override.env" })).toBeUndefined();
   });
 });

@@ -462,7 +462,7 @@ export async function runIdentityCommand(options: {
   const identity = await readLoginIdentitySnapshot(env).catch(() => undefined);
   if (!identity) {
     write("No model access configured.");
-    write("Log in via `zcode login`, or set up a custom provider in ~/.zcode/cli/custom-provider.env.");
+    write("Log in via `zcode login`, or set up a custom provider in ~/.zcode/cli/custom.env.");
     return 0;
   }
   write(`Provider: ${identity.providerId}`);

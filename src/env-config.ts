@@ -9,8 +9,8 @@ import { collectApiKeys, numberedApiKeyPattern, placeholderApiKey } from "./key-
  * Custom-provider file configuration.
  *
  * Users who prefer editing one flat file over hand-editing the nested
- * config.json keep their model settings in `~/.zcode/cli/custom-provider.env`
- * (copy the template from `custom-provider.env.example`). The file is the
+ * config.json keep their model settings in `~/.zcode/cli/custom.env`
+ * (copy the template from `custom.env.example`). The file is the
  * authority for the signed-out state: while no OAuth login is stored, the
  * launcher syncs it into config.json on every start — the `env-<provider-id>`
  * provider entry and the `model` block — and every other config.json block
@@ -57,7 +57,10 @@ export interface EnvFileSyncResult {
   failover?: FailoverBuild;
 }
 
-export const customProviderEnvFileName = "custom-provider.env";
+export const customEnvFileName = "custom.env";
+
+/** Legacy file names `migrateLegacyEnvFile` renames to `custom.env`, newest first. */
+const legacyEnvFileNames = ["custom-provider.env", ".env"] as const;
 
 export function envFilePath(
   env: NodeJS.ProcessEnv = process.env,
@@ -68,34 +71,40 @@ export function envFilePath(
   if (configured) return configured;
   const path = platform === "win32" ? win32 : posix;
   const configuredHome = (platform === "win32" ? env.USERPROFILE : env.HOME)?.trim();
-  return path.join(configuredHome || fallbackHome, ".zcode", "cli", customProviderEnvFileName);
+  return path.join(configuredHome || fallbackHome, ".zcode", "cli", customEnvFileName);
 }
 
 /**
- * One-time rename of the legacy `~/.zcode/cli/.env` to
- * `custom-provider.env`. Returns the new path when a rename happened, so the
- * caller can tell the user. Skipped entirely when `ZCODE_ENV_FILE` overrides
- * the location or the new name already exists.
+ * One-time rename of a legacy file to `~/.zcode/cli/custom.env`. Legacy chain,
+ * newest name first: `custom-provider.env`, then the original `.env`; the
+ * first legacy file present wins and one start performs at most one rename.
+ * Returns the new path when a rename happened, so the caller can tell the
+ * user. Skipped entirely when `ZCODE_ENV_FILE` overrides the location or the
+ * new name already exists (a coexisting legacy file stays untouched — the new
+ * name wins and the user decides what to do with the old file).
  */
 export async function migrateLegacyEnvFile(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<string | undefined> {
   if (env.ZCODE_ENV_FILE?.trim()) return undefined;
   const nextPath = envFilePath(env);
-  const legacyPath = join(dirname(nextPath), ".env");
   try {
     await access(nextPath);
     return undefined;
   } catch {
     // New file absent: a legacy file is worth renaming.
   }
-  try {
-    await access(legacyPath);
-  } catch {
-    return undefined;
+  for (const legacyName of legacyEnvFileNames) {
+    const legacyPath = join(dirname(nextPath), legacyName);
+    try {
+      await access(legacyPath);
+    } catch {
+      continue;
+    }
+    await rename(legacyPath, nextPath);
+    return nextPath;
   }
-  await rename(legacyPath, nextPath);
-  return nextPath;
+  return undefined;
 }
 
 /**
@@ -345,7 +354,7 @@ export interface EnvFileSyncOptions {
 }
 
 /**
- * Reads `~/.zcode/cli/custom-provider.env` and, when it declares model
+ * Reads `~/.zcode/cli/custom.env` and, when it declares model
  * settings, syncs them into config.json. While signed out the file is the
  * authority for its own provider entry and the `model` block; other
  * providers (for example credentials written by an OAuth login) and every

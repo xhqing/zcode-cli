@@ -164,7 +164,7 @@ describe("TUI selectors", () => {
 
   test("drops env-file slot entries whose official-slot twin is listed", () => {
     // Signed-in bigmodel slot plus the same provider configured through
-    // custom-provider.env: the runtime lists both; the picker shows each
+    // custom.env: the runtime lists both; the picker shows each
     // model once with the official (prefix-free) id.
     const picker = modelPicker([
       { id: "env-bigmodel/glm-5.3", name: "Glm 5.3", alias: "main" },

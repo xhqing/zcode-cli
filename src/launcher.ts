@@ -471,7 +471,7 @@ export async function main(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Sync ~/.zcode/cli/custom-provider.env into config.json before anything
+  // Sync ~/.zcode/cli/custom.env into config.json before anything
   // reads model settings: the login check below and the runtime both see the
   // result. While signed out the file owns the `model` block; while signed in
   // it only refreshes its own provider slot and the login's official slot
@@ -484,7 +484,7 @@ export async function main(args: string[]): Promise<number> {
   try {
     const migratedEnvFile = await migrateLegacyEnvFile().catch(() => undefined);
     if (migratedEnvFile) {
-      console.log(`Renamed ~/.zcode/cli/.env to ${migratedEnvFile} (custom-provider configuration).`);
+      console.log(`Migrated the legacy custom-provider config to ${migratedEnvFile}.`);
     }
     const signedInProvider = await readSignedInProvider();
     const envFile = await readEnvFile();

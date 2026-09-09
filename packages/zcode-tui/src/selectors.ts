@@ -112,7 +112,7 @@ function officialTwinId(id: string): string | undefined {
 
 /**
  * Filters out env-file slot entries whose official-slot twin is also listed.
- * A provider also configured through custom-provider.env lists its models in
+ * A provider also configured through custom.env lists its models in
  * both the official slot and the env-file slot — the runtime reports both, and
  * pickers show each model once (the official entry wins; its id matches the
  * displayed current model). Env-only entries without an official twin stay.

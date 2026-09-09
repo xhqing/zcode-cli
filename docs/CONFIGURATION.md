@@ -66,7 +66,7 @@ Three model-access paths are supported:
   matching masked API-key option;
 - **Direct API key with a custom provider**: use the
   [`config.example.json`](../config.example.json) template — or the flat
-  [custom-provider file](#custom-provider-file-custom-providerenv) — and do not
+  [custom-provider file](#custom-provider-file-customenv) — and do not
   log in.
 
 The custom-provider file serves the signed-out state. A plain `zcode login`
@@ -96,22 +96,24 @@ usage page calls) and appends a real server-side spend report: actual
 deducted credits per model with input / cache / output buckets. A missing
 token or a failed request silently omits the section.
 
-### Custom-provider file (custom-provider.env)
+### Custom-provider file (custom.env)
 
 Instead of hand-editing the nested `config.json`, keep model settings in a
 single flat file — the way to use zcode without logging in to bigmodel.cn /
 z.ai. Copy the commented template from the repository to
-`~/.zcode/cli/custom-provider.env` (same directory as `config.json`; override
+`~/.zcode/cli/custom.env` (same directory as `config.json`; override
 the location with `ZCODE_ENV_FILE`) and fill in your values:
 
 ```bash
 mkdir -p ~/.zcode/cli
-cp custom-provider.env.example ~/.zcode/cli/custom-provider.env
-chmod 600 ~/.zcode/cli/custom-provider.env
+cp custom.env.example ~/.zcode/cli/custom.env
+chmod 600 ~/.zcode/cli/custom.env
 ```
 
-A legacy `~/.zcode/cli/.env` from older versions is renamed to
-`custom-provider.env` automatically on the first start.
+A legacy `~/.zcode/cli/custom-provider.env` (or the even older `.env`) from
+earlier versions is renamed to `custom.env` automatically on the first start;
+when both the new name and a legacy file exist, the new name wins and the
+legacy file is left in place for you to dispose of.
 
 The minimum required content:
 
@@ -120,7 +122,7 @@ ZCODE_API_KEY=your-api-key
 ZCODE_MAIN_MODEL=glm-5.2
 ```
 
-Optional entries (all documented inline in `custom-provider.env.example`): the provider ID
+Optional entries (all documented inline in `custom.env.example`): the provider ID
 (`ZCODE_PROVIDER_ID`, default `zai` — any lowercase ID works; the synced
 config lives in its own `env-<provider-id>` slot, so it never collides with
 the official `zai`/`bigmodel` slots owned by `/login`; `zai` and `bigmodel`

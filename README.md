@@ -510,8 +510,8 @@ Coding Plan API key, or a direct API key with a custom provider. For detailed
 setup steps, retries/timeouts, theme, and turn-completion notifications, see
 [Configuration](./docs/CONFIGURATION.md).
 
-As a flat-file alternative, copy the commented `custom-provider.env.example`
-template to `~/.zcode/cli/custom-provider.env` and fill in your API key and
+As a flat-file alternative, copy the commented `custom.env.example`
+template to `~/.zcode/cli/custom.env` and fill in your API key and
 model IDs: no login or JSON editing required. The file serves the signed-out
 state — while you are not logged in (a login is an OAuth account or a key
 pasted through `/login`; a key declared only in this file does not count),

@@ -422,8 +422,8 @@ ZCode 從 `~/.zcode/cli/config.json`（Windows 上為
 API key、或帶自定義 provider 的直連 API key。詳細的設置步驟、重試 / 超時、主題
 與回合完成通知見[配置文檔](./docs/CONFIGURATION.md)。
 
-另有扁平文件方式：把帶註釋的 `custom-provider.env.example` 模板複製為
-`~/.zcode/cli/custom-provider.env` 並填入 API key 與模型 ID——無需登錄或手改
+另有扁平文件方式：把帶註釋的 `custom.env.example` 模板複製為
+`~/.zcode/cli/custom.env` 並填入 API key 與模型 ID——無需登錄或手改
 JSON。該文件專門服務**未登錄**場景：未登錄（登錄指 OAuth 賬號授權，或經
 `/login` 粘貼的 key；僅寫進本文件的 key 不算）時每次啟動先把它同步進 config.json
 再拉起 runtime（同步結果寫入獨立的 `env-<provider-id>` 槽位），身份欄顯示
