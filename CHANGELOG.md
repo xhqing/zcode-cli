@@ -4,6 +4,10 @@
 
 ## 3.8.1-32 - 2026-09-06
 
+### 变更（项目迁移收尾：CLAUDE.md 子项目清单路径更新）
+
+- **`.claude/CLAUDE.md` 子项目清单中 zcode-cli、zcode-vsce 的路径由 `~/Documents/Projects/` 更新为 `~/Developer/`**。为什么改：项目现址在 `~/Developer/`（`~/Documents/Projects/` 旧址已弃用，2026-09-08 迁移收尾时发现清单仍指旧路径），避免后续会话被引导到不存在的位置。
+
 ### 新增（测试用例同步：第二个验收需求组 custom-env-rename——配置文件改名 custom-provider.env → custom.env，Hopper 供例）
 
 - **`test-cases/pending/custom-env-rename/`（requirement.md + 验收用例 5 条，bun:test）——自定义供应商配置文件简化命名**（权威源 TestEngineerAgent 仓库 `cases/zcode-cli/pending/custom-env-rename/`，单向分发）。
