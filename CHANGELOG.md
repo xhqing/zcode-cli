@@ -17,7 +17,17 @@
   - 模板改名 `custom-provider.env.example` → `custom.env.example`（头部注释同步两层迁移说明）；`docs/CONFIGURATION.md`（标题、锚点 `#custom-provider-file-customenv`、迁移说明）、README 三版安装段同步。
   - 测试适配：`test/env-config.test.ts` 路径断言改新名、迁移组扩为四条（新长名迁移 / `.env` 直迁 / 两层并存取新长名且 `.env` 保留 / override 跳过）；`test/selectors.test.ts` 注释同步；`bin/zcode.js` 为构建产物随 `bun run build` 再生成。
 - **验证**：本需求组验收用例 `test-cases/pending/custom-env-rename/` 5 条全绿；全量 `bun test` 756 pass、剩余 8 fail 全部为并行需求组 model-picker-env-prefix 的待实现契约（按 dev-workflow 口径不阻塞本组）；`tsc --noEmit` 通过。
-- 当前状态：分支 `feat/custom-env-rename` 开发完成，待用户人工验收后合并回 main。
+- 当前状态：用户人工验收通过（2026-09-09，本机旧名文件真实迁移实测），已合并回 main。
+
+### 变更（model-picker-env-prefix 需求组实现落地：/model 与 /settings 选择器去 env- 前缀 + 未登录只列 custom-provider.env 模型）
+
+- **为什么改**：落实 2026-09-08 用户需求与本版本上方「测试用例更新 / 同步」条目登记的 pending 需求组——config.json 内部槽位 `env-<provider>` 泄露到显示层（`/model` 平铺列表 env 独有条目带前缀显示、`/settings → Model providers` 同一供应商拆成官方 + env 两个重复组）；且 3.8.1-31 实发「未登录选模型连不上上游」事故要求列表层收紧：未登录只显示真正有凭证的 env 槽条目。用户已拍板：去掉前缀显示、条目保留可选（非隐藏）；/model 与 /settings 一并修齐。
+- **改了什么**：
+  - `packages/zcode-tui/src/selectors.ts`：`modelPicker` / `providerModelPicker` 新增第三参 `signedIn?: boolean`（`undefined` 现状兼容全量、`false` 只留 env 槽条目、`true` 全量）——签名按 requirement 建议落地；条目 value / label / 生成的 `/model` 命令一律经 `displayModelRef` 去前缀（R1/R2）；级联分组键改 `displayProviderId`，官方槽与 env 槽同一供应商合并为一组、组内为孪生去重后的并集（R3），组名 fallback 也去前缀（R4）；current 标记与预选改为双形式匹配（内部槽位 id 与其显示形式都算命中，`isCurrentModel`，R5）；`signedIn === false` 时平铺与级联都滤掉非 env 槽条目（R9——官方槽未登录无凭证，列了也连不上）。
+  - `packages/zcode-tui/src/index.ts`：三个调用点（`showModelPicker`、`showModelProviderSettings`、快捷循环切换 `switchModel`）经 `readSignedInProvider()` 取登录态传入；`showModelPicker` 空列表时不再静默 / 空弹窗，按登录态提示（未登录：「sign in (/login) or configure ~/.zcode/cli/custom.env」；R10——文件名按并行需求组 custom-env-rename 的新名写，该组落地后即一致）；`switchTransientModel` 注释随显示形式语义更新（选择路径仍走 `resolveModelSlotRef` 解析到有凭证槽位，R7/R8 的防护由既有实现承担）。
+  - `test/selectors.test.ts`：`keeps env-file slot entries without an official twin` 更新为去前缀断言（requirement 显式废弃旧契约的授权变更），补 current 双形式标记断言；其余 selectors 既有测试（孪生去重、current 双形式、全遮蔽组消失、providerName fallback）零改动全绿。
+- **验证**：本需求组验收用例 `test-cases/pending/model-picker-env-prefix/` 11 条全绿；全量 `bun test` 759 pass、剩余 3 fail 全部为并行需求组 custom-env-rename 的待实现契约（按 dev-workflow 口径不阻塞本组）；`tsc --noEmit` 通过。
+- 当前状态：用户人工验收通过（2026-09-09，含未登录逐模型连通实测），已合并回 main。
 
 ### 新增（测试用例同步：第二个验收需求组 custom-env-rename——配置文件改名 custom-provider.env → custom.env，Hopper 供例）
 

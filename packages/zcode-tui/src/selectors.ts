@@ -162,16 +162,21 @@ function modelLabel(option: ModelOption): string {
     : option.modelId;
 }
 
+/** Current-model match on both forms: the internal slot id and its display form. */
+function isCurrentModel(id: string, currentIds: ReadonlySet<string>): boolean {
+  return currentIds.has(id) || currentIds.has(displayModelRef(id));
+}
+
 function describeModel(option: ModelOption, currentIds: ReadonlySet<string>): string | undefined {
   const details = [
     option.name && option.name !== option.modelId ? option.name : undefined,
-    currentIds.has(option.id) ? "current" : undefined
+    isCurrentModel(option.id, currentIds) ? "current" : undefined
   ].filter((value): value is string => Boolean(value));
   return details.length > 0 ? details.join(" · ") : undefined;
 }
 
 function providerLabel(option: ModelOption): string {
-  return option.providerLabel ?? option.providerId;
+  return option.providerLabel ?? displayProviderId(option.providerId);
 }
 
 /**
@@ -181,8 +186,18 @@ function providerLabel(option: ModelOption): string {
  * The runtime passes each option as `{ modelId, providerId, ... }` (from
  * `listModels()`/`RXr`), but tests and some callers use `{ id, name }` — both
  * forms are accepted.
+ *
+ * Groups are keyed by the display provider id, so an official slot and the
+ * same provider's custom.env slot (`env-<id>`) merge into a single group.
+ * `signedIn === false` keeps only custom.env-slot entries (the official slots
+ * carry no credential while signed out, so their entries would not connect);
+ * `undefined` and `true` keep the full list.
  */
-export function providerModelPicker(options: unknown[], currentModel?: string): ProviderModelPicker | null {
+export function providerModelPicker(
+  options: unknown[],
+  currentModel?: string,
+  signedIn?: boolean
+): ProviderModelPicker | null {
   const parsed: ModelOption[] = [];
   const seen = new Set<string>();
 
@@ -193,12 +208,17 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
     parsed.push(candidate);
   }
 
+  const candidates = signedIn === false
+    ? parsed.filter((candidate) => candidate.providerId.startsWith(envProviderSlotPrefix))
+    : parsed;
+
   const currentIds = currentModelIds(currentModel);
   const byProvider = new Map<string, ModelOption[]>();
-  for (const candidate of withoutEnvSlotTwins(parsed, (option) => option.id)) {
-    const group = byProvider.get(candidate.providerId) ?? [];
+  for (const candidate of withoutEnvSlotTwins(candidates, (option) => option.id)) {
+    const groupId = displayProviderId(candidate.providerId);
+    const group = byProvider.get(groupId) ?? [];
     group.push(candidate);
-    byProvider.set(candidate.providerId, group);
+    byProvider.set(groupId, group);
   }
 
   if (byProvider.size === 0) return null;
@@ -206,12 +226,15 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
   const groups: ProviderModelGroup[] = [];
   for (const [providerId, models] of byProvider) {
     const label = providerLabel(models[0]!);
-    const items: PickerItem[] = models.map((model) => ({
-      value: model.id,
-      label: modelLabel(model),
-      description: describeModel(model, currentIds),
-      command: `/model ${model.id}`
-    }));
+    const items: PickerItem[] = models.map((model) => {
+      const value = displayModelRef(model.id);
+      return {
+        value,
+        label: modelLabel(model),
+        description: describeModel(model, currentIds),
+        command: `/model ${value}`
+      };
+    });
     const currentIndex = items.findIndex((item) => currentIds.has(item.value));
     groups.push({
       providerId,
@@ -245,7 +268,19 @@ export function providerModelPicker(options: unknown[], currentModel?: string): 
   };
 }
 
-export function modelPicker(options: unknown[], currentModel?: string): PickerSpec {
+/**
+ * Flat `/model` picker. Values, labels and the generated `/model <id>`
+ * commands use the prefix-free display form (`displayModelRef`); the internal
+ * `env-` slot prefix never reaches the user. `signedIn === false` keeps only
+ * custom.env-slot entries (official slots carry no credential while signed
+ * out); `undefined` and `true` keep the full list. The picked value resolves
+ * back to a credentialed slot through `resolveModelSlotRef`.
+ */
+export function modelPicker(
+  options: unknown[],
+  currentModel?: string,
+  signedIn?: boolean
+): PickerSpec {
   const records = new Map<string, Record<string, unknown> | undefined>();
   for (const option of options) {
     const record = isRecord(option) ? option : undefined;
@@ -254,19 +289,25 @@ export function modelPicker(options: unknown[], currentModel?: string): PickerSp
     records.set(id, record);
   }
 
+  let ids = [...records.keys()];
+  if (signedIn === false) {
+    ids = ids.filter((id) => id.startsWith(envProviderSlotPrefix));
+  }
+
   const currentIds = currentModelIds(currentModel);
-  const items: PickerItem[] = withoutEnvSlotTwins([...records.keys()], (id) => id).map((id) => {
+  const items: PickerItem[] = withoutEnvSlotTwins(ids, (id) => id).map((id) => {
     const record = records.get(id);
+    const value = displayModelRef(id);
     const details = [
       asString(record?.name) !== id ? asString(record?.name) : undefined,
       asString(record?.alias),
-      currentIds.has(id) ? "current" : undefined
-    ].filter((value): value is string => Boolean(value));
+      isCurrentModel(id, currentIds) ? "current" : undefined
+    ].filter((detail): detail is string => Boolean(detail));
     return {
-      value: id,
-      label: id,
+      value,
+      label: value,
       description: details.length > 0 ? details.join(" · ") : undefined,
-      command: `/model ${id}`
+      command: `/model ${value}`
     };
   });
 
