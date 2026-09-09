@@ -17,7 +17,6 @@
   - `test/selectors.test.ts`：`keeps env-file slot entries without an official twin` 更新为去前缀断言（requirement 显式废弃旧契约的授权变更），补 current 双形式标记断言；其余 selectors 既有测试（孪生去重、current 双形式、全遮蔽组消失、providerName fallback）零改动全绿。
 - **验证**：本需求组验收用例 `test-cases/pending/model-picker-env-prefix/` 11 条全绿；全量 `bun test` 759 pass、剩余 3 fail 全部为并行需求组 custom-env-rename 的待实现契约（按 dev-workflow 口径不阻塞本组）；`tsc --noEmit` 通过。
 - 当前状态：分支 `feat/model-picker-env-prefix` 开发完成，待用户人工验收（重点：未登录逐条选择每个模型确认实际能对话——3.8.1-31 事故场景）后合并回 main。
-
 ### 新增（测试用例同步：第二个验收需求组 custom-env-rename——配置文件改名 custom-provider.env → custom.env，Hopper 供例）
 
 - **`test-cases/pending/custom-env-rename/`（requirement.md + 验收用例 5 条，bun:test）——自定义供应商配置文件简化命名**（权威源 TestEngineerAgent 仓库 `cases/zcode-cli/pending/custom-env-rename/`，单向分发）。
