@@ -10,5 +10,8 @@ bin/zcode.js
 tmp/
 .env
 
+# 本地规划文档（不提交）
+PLAN.md
+
 # Claude Code 个人本地配置（机器本地，不提交）
 .claude/settings.local.json
