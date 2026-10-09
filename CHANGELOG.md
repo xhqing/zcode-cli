@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 变更（同步 Atlas 子项目清单：加入 mp4-player）
+
+- **为什么改**：Atlas 权威源把 mp4-player 登记为新子项目，按超集规则 zcode-cli 的随附版（`.claude/CLAUDE.md`）需同步最新全文。
+- **改了什么**（2026-10-09）：`.claude/CLAUDE.md` 底部随附的 FullStackEngineerAgent CLAUDE.md 全文更新——「目前在手项目」与「当前子项目清单」两处加入 mp4-player。
+
 ### 变更（PLAN.md 加入 .gitignore，不随仓库公开）
 
 - **为什么改**：用户 2026-09-12 要求项目根的 `PLAN.md`（自有 Harness 演化规划文档，见 3.8.1-32 条目）不公开——规划涉及战略方向与内部决策，不宜进公开仓库。
